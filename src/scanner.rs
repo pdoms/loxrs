@@ -174,8 +174,6 @@ impl<'i> Scanner<'i> {
                 }
                 _ => {
                     self.advance();
-                    #[cfg(test)]
-                    unimplemented!("{ch} is uminplemented");
                     errors.push(ScanError::UnexpectedCharacter { ch, pos: self.pos });
                 }
             }
@@ -219,8 +217,9 @@ impl<'i> Scanner<'i> {
 
     fn parse_number(&mut self) -> Result<(), ScanError> {
         while let Some(ch) = self.peek() {
-            if ch == '.' && self.peek_next().is_some_and(|c| c.is_ascii_digit())
-            || ch.is_ascii_digit() {
+            if (ch == '.' && self.peek_next().is_some_and(|c| c.is_ascii_digit()))
+                || ch.is_ascii_digit()
+            {
                 self.advance();
                 self.push_lexeme(ch);
             } else {
@@ -303,11 +302,7 @@ impl<'i> Scanner<'i> {
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        scanner::Scanner,
-        tok,
-        token::{TokenType, dbg_print_tokens_seq},
-    };
+    use crate::{scanner::Scanner, tok, token::TokenType};
 
     #[test]
     fn parse_numeric_assignment() {
