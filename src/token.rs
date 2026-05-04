@@ -8,11 +8,10 @@ pub struct Token {
     pub pos: (usize, usize),
 }
 
-
 impl Token {
     /// takes a [`TokenType`], lexeme and postion and constructs a new [`Token`]
-    /// The pos provided is the current position of the parser, hence, 
-    /// the length of the lexeme is subtracted to get the beginning of the 
+    /// The pos provided is the current position of the parser, hence,
+    /// the length of the lexeme is subtracted to get the beginning of the
     /// lexeme in the source code
     pub fn new_do_offset(ty: TokenType, lexeme: String, pos: (usize, usize)) -> Self {
         let lex_len = lexeme.len();
@@ -20,7 +19,7 @@ impl Token {
         pos.1 = pos.1.saturating_sub(lex_len);
         Self { ty, lexeme, pos }
     }
-    
+
     /// shorthand constructuctor for tokens that can be represented by one char
     /// Returns the constructed token on success. (Calculates postion like
     /// new_do_offset.
@@ -39,19 +38,19 @@ impl Token {
             '=' => TokenType::Eq,
             ',' => TokenType::Comma,
             '.' => TokenType::Dot,
-            _ => return Err(())
+            _ => return Err(()),
         };
         let mut pos = pos;
         pos.1 = pos.1.saturating_sub(1);
         Ok(Self {
             ty,
             lexeme: ch.to_string(),
-            pos
+            pos,
         })
     }
     /// checks if the parsed identifier matches a
-    /// keyword and changes the type of the token 
-    /// if that is true. Otherwise leaves 
+    /// keyword and changes the type of the token
+    /// if that is true. Otherwise leaves
     /// token untouched
     pub fn check_identifier_is_keyword(&mut self) {
         if let TokenType::Identifier(_) = self.ty {
@@ -62,10 +61,10 @@ impl Token {
                 "if" => self.ty = TokenType::If,
                 "print" => self.ty = TokenType::Print,
                 "while" => self.ty = TokenType::While,
-                "nil"  => self.ty = TokenType::Nil,
+                "nil" => self.ty = TokenType::Nil,
                 "and" => self.ty = TokenType::And,
-                "or"    => self.ty = TokenType::Or,
-                "else" => self.ty = TokenType::Else, 
+                "or" => self.ty = TokenType::Or,
+                "else" => self.ty = TokenType::Else,
                 "for" => self.ty = TokenType::For,
                 "fun" => self.ty = TokenType::Fun,
                 "return" => self.ty = TokenType::Return,
@@ -77,7 +76,6 @@ impl Token {
         }
     }
 }
-
 
 #[derive(Debug, PartialEq)]
 pub enum TokenType {
@@ -120,7 +118,7 @@ pub enum TokenType {
 
     And,
     Or,
-    Else, 
+    Else,
     For,
     Fun,
     Return,
@@ -132,22 +130,14 @@ pub enum TokenType {
     Eof,
 }
 
-
-
 #[macro_export]
 macro_rules! tok {
     ($t:expr, $l:expr, $p:expr) => {
-        crate::token::Token {
+        $crate::token::Token {
             ty: $t,
             lexeme: $l,
-            pos: $p
+            pos: $p,
         }
-    }
-}
-
-pub fn dbg_print_tokens_seq(tokens: &[Token]) {
-    for t in tokens {
-        println!("{:?}", t.ty);
-    }
+    };
 }
 
