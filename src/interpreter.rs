@@ -11,56 +11,57 @@ fn is_truthy(lit: &Lit) -> bool {
     }
 }
 
-pub fn eval(expr: &Expr) -> Result<Lit, RuntimeError> {
-    match expr {
-        Expr::Literal(lit) => Ok(lit.clone()),
-        Expr::Grouping(inner) => eval(inner),
-        Expr::Unary { op, right } => {
-            let right = eval(right)?;
-            match op {
-                Op::Not => Ok(Lit::Bool(!is_truthy(&right))),
-                Op::Sub => match right {
-                    Lit::Number(n) => Ok(Lit::Number(-n)),
-                    _ => Err(RuntimeError::TypeError {
-                        msg: "operand must be a number".to_string(),
-                    }),
-                },
-                _ => Err(RuntimeError::TypeError {
-                    msg: "invalid unary operator".to_string(),
-                }),
-            }
-        }
-        Expr::Binary { op, right, left } => {
-            let left = eval(left)?;
-            let right = eval(right)?;
+pub struct Interpreter;
 
-            match op {
-                Op::Equal => Ok(Lit::Bool(left == right)),
-                Op::NotEqual => Ok(Lit::Bool(left != right)),
-                Op::LessThan => left.less(right),
-                Op::LessThanEqual => left.less_eq(right),
-                Op::GreaterThan => left.greater(right),
-                Op::GreaterThanEqual => left.greater_eq(right),
-                Op::Add => left.add(right),
-                Op::Sub => left.sub(right),
-                Op::Mul => left.mul(right),
-                Op::Div => left.div(right),
-                _ => Err(RuntimeError::InvalidOperator {
-                    msg: format!("'{}' is not a valid binary operator", op),
-                }),
+impl Interpreter {
+    pub fn eval(&mut self, expr: &Expr) -> Result<Lit, RuntimeError> {
+        match expr {
+            Expr::Literal(lit) => Ok(lit.clone()),
+            Expr::Grouping(inner) => self.eval(inner),
+            Expr::Unary { op, right } => {
+                let right = self.eval(right)?;
+                match op {
+                    Op::Not => Ok(Lit::Bool(!is_truthy(&right))),
+                    Op::Sub => match right {
+                        Lit::Number(n) => Ok(Lit::Number(-n)),
+                        _ => Err(RuntimeError::TypeError {
+                            msg: "operand must be a number".to_string(),
+                        }),
+                    },
+                    _ => Err(RuntimeError::TypeError {
+                        msg: "invalid unary operator".to_string(),
+                    }),
+                }
+            }
+            Expr::Binary { op, right, left } => {
+                let left = self.eval(left)?;
+                let right = self.eval(right)?;
+
+                match op {
+                    Op::Equal => Ok(Lit::Bool(left == right)),
+                    Op::NotEqual => Ok(Lit::Bool(left != right)),
+                    Op::LessThan => left.less(right),
+                    Op::LessThanEqual => left.less_eq(right),
+                    Op::GreaterThan => left.greater(right),
+                    Op::GreaterThanEqual => left.greater_eq(right),
+                    Op::Add => left.add(right),
+                    Op::Sub => left.sub(right),
+                    Op::Mul => left.mul(right),
+                    Op::Div => left.div(right),
+                    _ => Err(RuntimeError::InvalidOperator {
+                        msg: format!("'{}' is not a valid binary operator", op),
+                    }),
+                }
             }
         }
     }
 }
 
+
 #[cfg(test)]
 mod test {
     use crate::{
-        errors::RuntimeError,
-        interpreter::eval,
-        nodes::{Lit, Stmt},
-        parser::Parser,
-        scanner::Scanner,
+        errors::RuntimeError, interpreter::Interpreter, nodes::{Lit, Stmt}, parser::Parser, scanner::Scanner
     };
 
     fn do_eval(case: &str) -> Result<Lit, RuntimeError> {
@@ -69,7 +70,8 @@ mod test {
         let mut parser = Parser::new(&scanner.tokens);
         let res = parser.parse().unwrap();
         if let Stmt::Expression(expr) = &res[0] {
-            return eval(&expr);
+            let mut interpreter = Interpreter;
+            return interpreter.eval(&expr);
         }
         unreachable!()
     }
