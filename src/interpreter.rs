@@ -56,15 +56,22 @@ pub fn eval(expr: &Expr) -> Result<Lit, RuntimeError> {
 #[cfg(test)]
 mod test {
     use crate::{
-        errors::RuntimeError, interpreter::eval, nodes::Lit, parser::Parser, scanner::Scanner,
+        errors::RuntimeError,
+        interpreter::eval,
+        nodes::{Lit, Stmt},
+        parser::Parser,
+        scanner::Scanner,
     };
 
     fn do_eval(case: &str) -> Result<Lit, RuntimeError> {
         let mut scanner = Scanner::new(case.as_bytes());
         let _ = scanner.parse().unwrap();
         let mut parser = Parser::new(&scanner.tokens);
-        let expr = parser.parse().unwrap();
-        eval(&expr)
+        let res = parser.parse().unwrap();
+        if let Stmt::Expression(expr) = &res[0] {
+            return eval(&expr);
+        }
+        unreachable!()
     }
 
     #[test]

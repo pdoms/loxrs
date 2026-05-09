@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::{interpreter::eval, parser::Parser, scanner::Scanner};
+use crate::{parser::Parser, scanner::Scanner};
 
 pub fn run(input_file: &str) -> Result<(), ()> {
     let path = Path::new(input_file);
@@ -25,12 +25,7 @@ pub fn run(input_file: &str) -> Result<(), ()> {
 
     //TODO do we really need it as ref? Could also just be passed on
     let mut parser = Parser::new(&scanner.tokens);
-    let expr = parser.parse().unwrap();
-    println!("AST: {}", expr);
-    match eval(&expr) {
-        Ok(v) => println!("{v}"),
-        Err(err) => eprintln!("{err}"),
-    }
-
+    let stmts = parser.parse().unwrap();
+    println!("Parsed {} statements", stmts.len());
     Ok(())
 }

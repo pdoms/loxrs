@@ -5,6 +5,11 @@ use crate::{
     token::TokenType,
 };
 
+pub enum Stmt {
+    Print(Expr),
+    Expression(Expr),
+}
+
 pub enum Expr {
     Literal(Lit),
     Unary {

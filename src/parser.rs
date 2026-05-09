@@ -17,7 +17,7 @@
 //!
 use crate::{
     errors::ParserError,
-    nodes::{Expr, Lit, Op},
+    nodes::{Expr, Lit, Op, Stmt},
     token::{Token, TokenType},
 };
 
@@ -31,8 +31,56 @@ impl<'t> Parser<'t> {
         Self { tokens, cursor: 0 }
     }
 
-    pub fn parse(&mut self) -> Result<Expr, ParserError> {
-        self.expression()
+    pub fn parse(&mut self) -> Result<Vec<Stmt>, Vec<ParserError>> {
+        let mut stmts = Vec::new();
+        let mut errors = Vec::new();
+        while !self.is_eof() {
+            match self.statement() {
+                Ok(stmt) => stmts.push(stmt),
+                Err(err) => {
+                    errors.push(err);
+                    self.synchronize();
+                }
+            }
+        }
+        if errors.is_empty() {
+            Ok(stmts)
+        } else {
+            Err(errors)
+        }
+    }
+
+    fn statement(&mut self) -> Result<Stmt, ParserError> {
+        if self.match_token(&[TokenType::Print]) {
+            return self.print_stmt();
+        }
+        self.expr_stmt()
+    }
+
+    fn print_stmt(&mut self) -> Result<Stmt, ParserError> {
+        let value = self.expression()?;
+        self.consume(
+            TokenType::Semicolon,
+            ParserError::UnexpectedToken {
+                expected: TokenType::Semicolon,
+                got: self.tokens[self.cursor].ty.clone(),
+                pos: self.tokens[self.cursor].pos,
+            },
+        );
+        Ok(Stmt::Print(value))
+    }
+
+    fn expr_stmt(&mut self) -> Result<Stmt, ParserError> {
+        let value = self.expression()?;
+        self.consume(
+            TokenType::Semicolon,
+            ParserError::UnexpectedToken {
+                expected: TokenType::Semicolon,
+                got: self.tokens[self.cursor].ty.clone(),
+                pos: self.tokens[self.cursor].pos,
+            },
+        );
+        Ok(Stmt::Expression(value))
     }
 
     fn expression(&mut self) -> Result<Expr, ParserError> {
@@ -199,7 +247,6 @@ impl<'t> Parser<'t> {
         Err(err)
     }
 
-    #[allow(unused)]
     fn synchronize(&mut self) {
         use TokenType::*;
         self.advance();
@@ -220,10 +267,10 @@ impl<'t> Parser<'t> {
 
 #[cfg(test)]
 mod test {
-    use crate::{parser::Parser, scanner::Scanner};
+    use crate::{nodes::Stmt, parser::Parser, scanner::Scanner};
 
     #[test]
-    fn ast() {
+    fn ast_expressions() {
         let cases = vec![
             ("5 + 3 * 2", "(5 + (3 * 2))"),
             ("10 / 2 - 1", "((10 / 2) - 1)"),
@@ -242,8 +289,10 @@ mod test {
             let mut scanner = Scanner::new(case.as_bytes());
             let _ = scanner.parse().unwrap();
             let mut parser = Parser::new(&scanner.tokens);
-            let expr = parser.parse().unwrap();
-            assert_eq!(expr.to_string(), exp.to_string());
+            let res = parser.parse().unwrap();
+            if let Stmt::Expression(expr) = &res[0] {
+                assert_eq!(expr.to_string(), exp.to_string());
+            }
         }
     }
 }
