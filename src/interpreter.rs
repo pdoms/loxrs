@@ -1,6 +1,6 @@
+
 use crate::{
-    errors::RuntimeError,
-    nodes::{Expr, Lit, Op},
+    environment::Environment, errors::RuntimeError, nodes::{Expr, Lit, Op, Stmt}
 };
 
 fn is_truthy(lit: &Lit) -> bool {
@@ -11,9 +11,25 @@ fn is_truthy(lit: &Lit) -> bool {
     }
 }
 
-pub struct Interpreter;
+/// We use `W` (output) to test print statements.
+pub struct Interpreter<W: std::io::Write> {
+    output: W,
+    environment: Environment 
+}
 
-impl Interpreter {
+impl<W: std::io::Write> Interpreter<W> {
+    pub fn new(output:  W) -> Self {
+        Self {output, environment: Environment::new()}
+
+    }
+
+    pub fn interpret(&mut self, stmts: &[Stmt]) -> Result<(), RuntimeError> {
+        for stmt in stmts {
+            self.execute(stmt)?;
+        }
+        Ok(())
+    }
+
     pub fn eval(&mut self, expr: &Expr) -> Result<Lit, RuntimeError> {
         match expr {
             Expr::Literal(lit) => Ok(lit.clone()),
@@ -53,6 +69,32 @@ impl Interpreter {
                     }),
                 }
             }
+            Expr::Variable(name) => {
+                self.environment.get(name).cloned()
+            }
+        }
+    }
+
+    pub fn execute(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
+        match stmt {
+            Stmt::Print(expr) => {
+                let value = self.eval(expr)?;
+                let _ = writeln!(self.output, "{}", value);
+                self.output.flush().expect("flushing output");
+                Ok(())
+            },
+            Stmt::Expression(expr) => {
+                self.eval(expr)?;
+                Ok(())
+            },
+            Stmt::Var { name, initializer } => {
+                let value = match initializer {
+                    Some(expr) => self.eval(expr)?,
+                    None => Lit::Nil,
+                };
+                self.environment.insert(name.as_str(), value);
+                Ok(())
+            }
         }
     }
 }
@@ -70,7 +112,8 @@ mod test {
         let mut parser = Parser::new(&scanner.tokens);
         let res = parser.parse().unwrap();
         if let Stmt::Expression(expr) = &res[0] {
-            let mut interpreter = Interpreter;
+            let output = Vec::new();
+            let mut interpreter = Interpreter::new(output);
             return interpreter.eval(&expr);
         }
         unreachable!()
@@ -171,5 +214,63 @@ mod test {
             let result = do_eval(case);
             assert!(matches!(result, Err(RuntimeError::TypeError { .. })));
         }
+    }
+
+    #[test]
+    fn simple_stmts() {
+        let cases = vec![
+            ("print 5 + 3 * 2;"      , "11\n"),
+            ("print \"hello world\";", "hello world\n"),
+            ("1 + 2;"                , "")
+        ];
+        for (case, exp) in cases {
+            let mut scanner = Scanner::new(case.as_bytes());
+            let _ = scanner.parse().unwrap();
+            let mut parser = Parser::new(&scanner.tokens);
+            let stmts = parser.parse().unwrap();
+            let mut out = Vec::new();
+            let mut interpreter = Interpreter::new(&mut out);
+            assert!(interpreter.interpret(&stmts).is_ok());
+            assert_eq!(str::from_utf8(&out).unwrap(), exp);
+        }
+    }
+
+    #[test]
+    fn variables() {
+        let cases = vec![
+            ("var x = 5; print x;"      , "5\n"),
+            ("var x; print x;",         "nil\n"),
+            ("var x = 5 + 3; print x;",  "8\n")
+        ];
+        for (case, exp) in cases {
+            let mut scanner = Scanner::new(case.as_bytes());
+            let _ = scanner.parse().unwrap();
+            let mut parser = Parser::new(&scanner.tokens);
+            let stmts = parser.parse().unwrap();
+            let mut out = Vec::new();
+            let mut interpreter = Interpreter::new(&mut out);
+            assert!(interpreter.interpret(&stmts).is_ok());
+            assert_eq!(str::from_utf8(&out).unwrap(), exp);
+        }
+
+        let mut scanner = Scanner::new("print x;".as_bytes());
+        let _ = scanner.parse().unwrap();
+        let mut parser = Parser::new(&scanner.tokens);
+        let stmts = parser.parse().unwrap();
+        let mut out = Vec::new();
+        let mut interpreter = Interpreter::new(&mut out);
+
+        if let Err(RuntimeError::UndefinedVariable { var_name }) = interpreter.interpret(&stmts) {
+            assert!(var_name.as_str() == "x");
+        } else {
+            assert!(false, "unreachable at variables")
+        }
+
+    
+
+
+
+
+
     }
 }

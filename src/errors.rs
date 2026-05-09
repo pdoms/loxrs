@@ -63,6 +63,7 @@ pub enum RuntimeError {
     TypeError { msg: String },
     InvalidOperator { msg: String },
     DivisionByZero,
+    UndefinedVariable {var_name: String}
 }
 impl Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -70,6 +71,7 @@ impl Display for RuntimeError {
             RuntimeError::TypeError { msg } => write!(f, "TypeError: {msg}"),
             RuntimeError::InvalidOperator { msg } => write!(f, "InvalidOperator: {msg}"),
             RuntimeError::DivisionByZero => write!(f, "DivisionByZero"),
+            RuntimeError::UndefinedVariable { var_name } => write!(f, "UndefinedVariable: '{var_name}'"),
         }
     }
 }

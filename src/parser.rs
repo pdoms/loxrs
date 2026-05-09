@@ -2,19 +2,24 @@
 //! Chapter 6.1
 //!
 //! ```
-//! expression     -> equality ;
-//! equality       -> comparison ( ( "!=" | "==" ) comparison )* ;
-//! comparison     -> term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
-//! term           -> factor ( ( "-" | "+" ) factor )* ;
-//! factor         -> unary ( ( "/" | "*" ) unary )* ;
-//! unary          -> ( "!" | "-" ) unary
-//!                | primary ;
-//! primary        -> NUMBER | STRING | "true" | "false" | "nil"
-//!                | "(" expression ")" ;
+//! program         -> declaration* EOF ;
+//! declaration    -> varDecl 
+//!                 | satement ;
+//! varDecl         -> "var" IDENTIFIER ("=" expression)? ";" ;
+//! statement       -> exprStmt
+//!                 | printStmt ;
+//! exprStmt        -> expression ";"
+//! printStmt       -> "print" expression ";" ;
+//! expression      -> equality ;
+//! equality        -> comparison ( ( "!=" | "==" ) comparison )* ;
+//! comparison      -> term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
+//! term            -> factor ( ( "-" | "+" ) factor )* ;
+//! factor          -> unary ( ( "/" | "*" ) unary )* ;
+//! unary           -> ( "!" | "-" ) unary
+//!                 | primary ;
+//! primary         -> NUMBER | STRING | "true" | "false" | "nil"
+//!                 | "(" expression ")" | IDENTIFIER;
 //! ```
-//!
-//!
-//!
 use crate::{
     errors::ParserError,
     nodes::{Expr, Lit, Op, Stmt},
@@ -35,7 +40,7 @@ impl<'t> Parser<'t> {
         let mut stmts = Vec::new();
         let mut errors = Vec::new();
         while !self.is_eof() {
-            match self.statement() {
+            match self.declaration() {
                 Ok(stmt) => stmts.push(stmt),
                 Err(err) => {
                     errors.push(err);
@@ -48,6 +53,35 @@ impl<'t> Parser<'t> {
         } else {
             Err(errors)
         }
+    }
+
+    fn declaration(&mut self) -> Result<Stmt, ParserError> {
+        if self.match_token(&[TokenType::Var]) {
+            return self.var_declaration();
+        }
+        self.statement()
+    }
+
+    fn var_declaration(&mut self) -> Result<Stmt, ParserError> {
+        let name = match &self.peek().ty {
+            TokenType::Identifier(ident) => ident.clone(),
+            _ => return  Err(ParserError::UnexpectedToken { 
+                expected: TokenType::Identifier(String::new()), 
+                got: self.peek().ty.clone(), 
+                pos: self.peek().pos })
+        };
+
+        self.advance();
+
+        let initializer = if self.match_token(&[TokenType::Eq]) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+        self.consume(TokenType::Semicolon, ParserError::UnexpectedToken { expected: TokenType::Semicolon, got: self.peek().ty.clone(), pos: self.peek().pos })?;
+
+        Ok(Stmt::Var { name, initializer })
+
     }
 
     fn statement(&mut self) -> Result<Stmt, ParserError> {
@@ -63,8 +97,8 @@ impl<'t> Parser<'t> {
             TokenType::Semicolon,
             ParserError::UnexpectedToken {
                 expected: TokenType::Semicolon,
-                got: self.tokens[self.cursor].ty.clone(),
-                pos: self.tokens[self.cursor].pos,
+                got: self.peek().ty.clone(),
+                pos: self.peek().pos,
             },
         );
         Ok(Stmt::Print(value))
@@ -76,8 +110,8 @@ impl<'t> Parser<'t> {
             TokenType::Semicolon,
             ParserError::UnexpectedToken {
                 expected: TokenType::Semicolon,
-                got: self.tokens[self.cursor].ty.clone(),
-                pos: self.tokens[self.cursor].pos,
+                got: self.peek().ty.clone(),
+                pos: self.peek().pos,
             },
         );
         Ok(Stmt::Expression(value))
@@ -175,6 +209,12 @@ impl<'t> Parser<'t> {
             return Ok(Expr::Literal(Lit::String(data)));
         }
 
+        if let TokenType::Identifier(name) = &self.peek().ty.clone() {
+            self.advance();
+            return Ok(Expr::Variable(name.clone()))
+
+        }
+
         if self.match_token(&[TokenType::LeftParen]) {
             let expr = self.expression()?;
             self.consume(
@@ -187,6 +227,9 @@ impl<'t> Parser<'t> {
             )?;
             return Ok(Expr::Grouping(Box::new(expr)));
         }
+
+
+
         Err(ParserError::UnknwonError {
             last_token: self.tokens[self.cursor].clone(),
         })
