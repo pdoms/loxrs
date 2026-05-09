@@ -56,11 +56,7 @@ pub fn eval(expr: &Expr) -> Result<Lit, RuntimeError> {
 #[cfg(test)]
 mod test {
     use crate::{
-        errors::RuntimeError,
-        interpreter::eval,
-        nodes::Lit,
-        parser::Parser,
-        scanner::Scanner,
+        errors::RuntimeError, interpreter::eval, nodes::Lit, parser::Parser, scanner::Scanner,
     };
 
     fn do_eval(case: &str) -> Result<Lit, RuntimeError> {
