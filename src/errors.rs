@@ -1,5 +1,9 @@
 use std::{error::Error, fmt::Display};
 
+use crate::token::{Token, TokenType};
+
+pub const NUMERIC_OPERANDS_NEEDED_ERR: &str = "operands must be numeric types";
+
 #[derive(Debug)]
 pub enum ScanError {
     UnexpectedCharacter { ch: char, pos: (usize, usize) },
@@ -24,3 +28,49 @@ impl Display for ScanError {
         }
     }
 }
+
+#[derive(Debug)]
+pub enum ParserError {
+    UnexpectedToken {
+        expected: TokenType,
+        got: TokenType,
+        pos: (usize, usize),
+    },
+    UnknwonError {
+        last_token: Token,
+    },
+}
+impl Display for ParserError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParserError::UnexpectedToken { expected, got, pos } => write!(
+                f,
+                "{}:{} unexpected token. Expected: {} got: {}",
+                pos.0, pos.1, expected, got
+            ),
+            ParserError::UnknwonError { last_token } => write!(
+                f,
+                "{}:{} unknown error. Last token: {}",
+                last_token.pos.0, last_token.pos.1, last_token.ty
+            ),
+        }
+    }
+}
+impl Error for ParserError {}
+
+#[derive(Debug, PartialEq)]
+pub enum RuntimeError {
+    TypeError { msg: String },
+    InvalidOperator { msg: String },
+    DivisionByZero,
+}
+impl Display for RuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RuntimeError::TypeError { msg } => write!(f, "TypeError: {msg}"),
+            RuntimeError::InvalidOperator { msg } => write!(f, "InvalidOperator: {msg}"),
+            RuntimeError::DivisionByZero => write!(f, "DivisionByZero"),
+        }
+    }
+}
+impl Error for RuntimeError {}

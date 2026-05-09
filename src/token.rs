@@ -1,4 +1,6 @@
-#[derive(PartialEq, Debug)]
+use std::fmt::Display;
+
+#[derive(PartialEq, Debug, Clone)]
 pub struct Token {
     /// type of the token
     pub ty: TokenType,
@@ -77,7 +79,7 @@ impl Token {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TokenType {
     // Punctuations
     Semicolon,
@@ -128,6 +130,52 @@ pub enum TokenType {
 
     //EOF
     Eof,
+}
+
+impl Display for TokenType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TokenType::Semicolon => write!(f, "Semicolon"),
+            TokenType::LeftParen => write!(f, "LeftParen"),
+            TokenType::LeftCurly => write!(f, "LeftCurly"),
+            TokenType::RightParen => write!(f, "RightParen"),
+            TokenType::RightCurly => write!(f, "RightCurly"),
+            TokenType::Dot => write!(f, "Dot"),
+            TokenType::Comma => write!(f, "Comma"),
+            TokenType::Eq => write!(f, "Eq"),
+            TokenType::Plus => write!(f, "Plus"),
+            TokenType::Minus => write!(f, "Minus"),
+            TokenType::Star => write!(f, "Star"),
+            TokenType::Slash => write!(f, "Slash"),
+            TokenType::EqEq => write!(f, "EqEq"),
+            TokenType::Greater => write!(f, "Greater"),
+            TokenType::GreaterEq => write!(f, "GreaterEq"),
+            TokenType::Less => write!(f, "Less"),
+            TokenType::LessEq => write!(f, "LessEq"),
+            TokenType::BangEq => write!(f, "BangEq"),
+            TokenType::Bang => write!(f, "Bang"),
+            TokenType::Number(num) => write!(f, "Number({})", num),
+            TokenType::Identifier(i) => write!(f, "Identifier({})", i),
+            TokenType::StringLit(s) => write!(f, "StringLit({})", s),
+            TokenType::Var => write!(f, "Var"),
+            TokenType::True => write!(f, "True"),
+            TokenType::False => write!(f, "False"),
+            TokenType::If => write!(f, "If"),
+            TokenType::Print => write!(f, "Print"),
+            TokenType::While => write!(f, "While"),
+            TokenType::Nil => write!(f, "Nil"),
+            TokenType::And => write!(f, "And"),
+            TokenType::Or => write!(f, "Or"),
+            TokenType::Else => write!(f, "Else"),
+            TokenType::For => write!(f, "For"),
+            TokenType::Fun => write!(f, "Fun"),
+            TokenType::Return => write!(f, "Return"),
+            TokenType::Class => write!(f, "Class"),
+            TokenType::Super => write!(f, "Super"),
+            TokenType::This => write!(f, "This"),
+            TokenType::Eof => write!(f, "Eof"),
+        }
+    }
 }
 
 #[macro_export]

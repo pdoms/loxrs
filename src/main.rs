@@ -1,5 +1,8 @@
 mod driver;
 mod errors;
+mod interpreter;
+mod nodes;
+mod parser;
 mod scanner;
 mod token;
 
