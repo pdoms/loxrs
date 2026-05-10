@@ -35,43 +35,50 @@ impl<W: std::io::Write> Interpreter<W> {
             Expr::Literal(lit) => Ok(lit.clone()),
             Expr::Grouping(inner) => self.eval(inner),
             Expr::Unary { op, right } => {
-                let right = self.eval(right)?;
-                match op {
-                    Op::Not => Ok(Lit::Bool(!is_truthy(&right))),
-                    Op::Sub => match right {
-                        Lit::Number(n) => Ok(Lit::Number(-n)),
-                        _ => Err(RuntimeError::TypeError {
-                            msg: "operand must be a number".to_string(),
-                        }),
-                    },
-                    _ => Err(RuntimeError::TypeError {
-                        msg: "invalid unary operator".to_string(),
-                    }),
-                }
-            }
+                        let right = self.eval(right)?;
+                        match op {
+                            Op::Not => Ok(Lit::Bool(!is_truthy(&right))),
+                            Op::Sub => match right {
+                                Lit::Number(n) => Ok(Lit::Number(-n)),
+                                _ => Err(RuntimeError::TypeError {
+                                    msg: "operand must be a number".to_string(),
+                                }),
+                            },
+                            _ => Err(RuntimeError::TypeError {
+                                msg: "invalid unary operator".to_string(),
+                            }),
+                        }
+                    }
             Expr::Binary { op, right, left } => {
-                let left = self.eval(left)?;
-                let right = self.eval(right)?;
+                        let left = self.eval(left)?;
+                        let right = self.eval(right)?;
 
-                match op {
-                    Op::Equal => Ok(Lit::Bool(left == right)),
-                    Op::NotEqual => Ok(Lit::Bool(left != right)),
-                    Op::LessThan => left.less(right),
-                    Op::LessThanEqual => left.less_eq(right),
-                    Op::GreaterThan => left.greater(right),
-                    Op::GreaterThanEqual => left.greater_eq(right),
-                    Op::Add => left.add(right),
-                    Op::Sub => left.sub(right),
-                    Op::Mul => left.mul(right),
-                    Op::Div => left.div(right),
-                    _ => Err(RuntimeError::InvalidOperator {
-                        msg: format!("'{}' is not a valid binary operator", op),
-                    }),
-                }
-            }
+                        match op {
+                            Op::Equal => Ok(Lit::Bool(left == right)),
+                            Op::NotEqual => Ok(Lit::Bool(left != right)),
+                            Op::LessThan => left.less(right),
+                            Op::LessThanEqual => left.less_eq(right),
+                            Op::GreaterThan => left.greater(right),
+                            Op::GreaterThanEqual => left.greater_eq(right),
+                            Op::Add => left.add(right),
+                            Op::Sub => left.sub(right),
+                            Op::Mul => left.mul(right),
+                            Op::Div => left.div(right),
+                            _ => Err(RuntimeError::InvalidOperator {
+                                msg: format!("'{}' is not a valid binary operator", op),
+                            }),
+                        }
+                    }
             Expr::Variable(name) => {
-                self.environment.get(name).cloned()
-            }
+                        self.environment.get(name).cloned()
+                    }
+            Expr::Assign { name, value } => {
+                let value = self.eval(value)?;
+                match self.environment.get_mut(name) {
+                    Ok(slot) => {*slot = value.clone(); Ok(value)}
+                    Err(err) => Err(err)
+                }
+            },
         }
     }
 
@@ -265,12 +272,42 @@ mod test {
         } else {
             assert!(false, "unreachable at variables")
         }
+    }
 
-    
+    #[test]
+    fn assignments() {
+        let cases = vec![
+            ("var x = 5; x = 10; print x;", "10\n"), // basic assignement
+            ("var x = 5; print x = 10;",    "10\n"),   // assignment is an expression!
+            ("var a = 1; var b = 2; a = b = 3; print a; print b;", "3\n3\n"), // right associative
+            ("var x = 0; x = 5 + 3; print x;", "8\n"),
+            ("var x; x = 2; print x; x = 3; print x;", "2\n3\n"),
+            ("var x = 5; var y = 0; y = x; print y;", "5\n"),
+            ("var x = 5; print x; x = \"hello\"; print x;", "5\nhello\n")
+        ];
+        for (case, exp) in cases {
+            let mut scanner = Scanner::new(case.as_bytes());
+            let _ = scanner.parse().unwrap();
+            let mut parser = Parser::new(&scanner.tokens);
+            let stmts = parser.parse().unwrap();
+            let mut out = Vec::new();
+            let mut interpreter = Interpreter::new(&mut out);
+            assert!(interpreter.interpret(&stmts).is_ok());
+            assert_eq!(str::from_utf8(&out).unwrap(), exp);
+        }
+        let error_case = "x = 5;";
 
+        let mut scanner = Scanner::new(error_case.as_bytes());
+        let _ = scanner.parse().unwrap();
+        let mut parser = Parser::new(&scanner.tokens);
+        let stmts = parser.parse().unwrap();
+        let mut out = Vec::new();
+        let mut interpreter = Interpreter::new(&mut out);
 
-
-
-
+        if let Err(RuntimeError::UndefinedVariable { var_name }) = interpreter.interpret(&stmts) {
+            assert!(var_name.as_str() == "x");
+        } else {
+            assert!(false, "unreachable at variables")
+        }
     }
 }

@@ -39,20 +39,23 @@ pub enum ParserError {
     UnknwonError {
         last_token: Token,
     },
+    InvalidAssignmentTarget { pos: (usize, usize) }
 }
 impl Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ParserError::UnexpectedToken { expected, got, pos } => write!(
-                f,
-                "{}:{} unexpected token. Expected: {} got: {}",
-                pos.0, pos.1, expected, got
-            ),
+                        f,
+                        "{}:{} unexpected token. Expected: {} got: {}",
+                        pos.0, pos.1, expected, got
+                    ),
             ParserError::UnknwonError { last_token } => write!(
-                f,
-                "{}:{} unknown error. Last token: {}",
-                last_token.pos.0, last_token.pos.1, last_token.ty
-            ),
+                        f,
+                        "{}:{} unknown error. Last token: {}",
+                        last_token.pos.0, last_token.pos.1, last_token.ty
+                    ),
+            ParserError::InvalidAssignmentTarget { pos } => write!(f, 
+                "{}:{} invalid assigment target", pos.0, pos.1),
         }
     }
 }

@@ -10,7 +10,9 @@
 //!                 | printStmt ;
 //! exprStmt        -> expression ";"
 //! printStmt       -> "print" expression ";" ;
-//! expression      -> equality ;
+//! expression      -> assignment ;
+//! assignment      -> IDENTIFIER "=" assignment
+//!                 | equality ;
 //! equality        -> comparison ( ( "!=" | "==" ) comparison )* ;
 //! comparison      -> term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 //! term            -> factor ( ( "-" | "+" ) factor )* ;
@@ -118,8 +120,23 @@ impl<'t> Parser<'t> {
     }
 
     fn expression(&mut self) -> Result<Expr, ParserError> {
-        self.equality()
+        self.assignment()
     }
+
+    fn assignment(&mut self) -> Result<Expr, ParserError> {
+        let expr = self.equality()?;
+        if self.match_token(&[TokenType::Eq]) {
+            let value = self.assignment()?; // right-associative
+            if let Expr::Variable(name) = expr {
+                return Ok(Expr::Assign { name, value: Box::new(value) })
+            }
+            return Err(ParserError::InvalidAssignmentTarget { pos: self.peek().pos });
+        }
+
+        Ok(expr)
+
+    }
+
     fn equality(&mut self) -> Result<Expr, ParserError> {
         let mut left = self.comparison()?;
         while self.match_token(&[TokenType::BangEq, TokenType::EqEq]) {

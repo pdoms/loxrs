@@ -23,4 +23,10 @@ impl Environment {
             None => Err(RuntimeError::UndefinedVariable { var_name: k.to_owned() })
         }
     }
+    pub fn get_mut(&mut self, k: &String) -> Result<&mut Lit, RuntimeError> {
+        match self.vars.get_mut(k) {
+            Some(v) => Ok(v),
+            None => Err(RuntimeError::UndefinedVariable { var_name: k.to_owned() })
+        }
+    }
 }
