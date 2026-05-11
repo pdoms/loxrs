@@ -397,9 +397,21 @@ mod test {
             assert!(interpreter.interpret(&stmts).is_ok());
             assert_eq!(str::from_utf8(&out).unwrap(), exp);
         }
-        let error_case = "x = 5;";
-
         // variable does not leak out of scope
-        //"{ var x = 1; } print x;"                          ,  Err(UndefinedVariable)
+        let error_case = "{ var x = 1; } print x;";
+
+        let mut scanner = Scanner::new(error_case.as_bytes());
+        let _ = scanner.parse().unwrap();
+        let mut parser = Parser::new(&scanner.tokens);
+        let stmts = parser.parse().unwrap();
+        let mut out = Vec::new();
+        let mut interpreter = Interpreter::new(&mut out);
+
+        if let Err(RuntimeError::UndefinedVariable { var_name }) = interpreter.interpret(&stmts) {
+            assert!(var_name.as_str() == "x");
+        } else {
+            assert!(false, "unreachable at variables")
+        }
+
     }
 }
