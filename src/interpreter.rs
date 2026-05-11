@@ -412,6 +412,5 @@ mod test {
         } else {
             assert!(false, "unreachable at variables")
         }
-
     }
 }
