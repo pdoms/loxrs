@@ -111,7 +111,7 @@ impl<W: std::io::Write> Interpreter<W> {
                 return Some(value);
             }
         }
-        return None;
+        None
     }
 
     /// is used at var x = 5

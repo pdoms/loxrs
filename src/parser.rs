@@ -125,7 +125,7 @@ impl<'t> Parser<'t> {
 
     fn print_stmt(&mut self) -> Result<Stmt, ParserError> {
         let value = self.expression()?;
-        self.consume(
+        let _ = self.consume(
             TokenType::Semicolon,
             ParserError::UnexpectedToken {
                 expected: TokenType::Semicolon,
@@ -138,7 +138,7 @@ impl<'t> Parser<'t> {
 
     fn expr_stmt(&mut self) -> Result<Stmt, ParserError> {
         let value = self.expression()?;
-        self.consume(
+        let _ = self.consume(
             TokenType::Semicolon,
             ParserError::UnexpectedToken {
                 expected: TokenType::Semicolon,

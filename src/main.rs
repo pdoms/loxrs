@@ -21,7 +21,7 @@ fn main() {
     // for now we only expect 1 argument and if it is not there, we bail
     match args.next() {
         Some(in_file) => {
-            if let Err(()) = driver::run(&in_file) {
+            if driver::run(&in_file).is_err() {
                 std::process::exit(1);
             }
         }

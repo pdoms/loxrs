@@ -1,1 +1,24 @@
-5 + 3 * 2
+var x = 10;
+var y = 5;
+
+{
+    var z = x + y;
+    print z;
+}
+
+x = x - 1;
+print x;
+
+{
+    var x = 99;
+    print x;
+}
+
+print x;
+
+var message = "hello";
+{
+    var message = "world";
+    print message;
+}
+print message;

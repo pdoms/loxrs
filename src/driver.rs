@@ -1,6 +1,7 @@
-use std::path::Path;
+use std::io::stdout;
+use std::{io::Write, path::Path};
 
-use crate::{parser::Parser, scanner::Scanner};
+use crate::{interpreter::Interpreter, parser::Parser, scanner::Scanner};
 
 pub fn run(input_file: &str) -> Result<(), ()> {
     let path = Path::new(input_file);
@@ -25,7 +26,31 @@ pub fn run(input_file: &str) -> Result<(), ()> {
 
     //TODO do we really need it as ref? Could also just be passed on
     let mut parser = Parser::new(&scanner.tokens);
-    let stmts = parser.parse().unwrap();
+    let stmts = match parser.parse() {
+        Ok(res) => res,
+        Err(errors) => {
+            println!("[ERROR] parser encountered the following errors");
+            for error in errors {
+                print!("{}{}", input_file, error);
+            }
+            vec![]
+        }
+    };
+    let mut stdout = stdout();
     println!("Parsed {} statements", stmts.len());
-    Ok(())
+    let mut interpreter = Interpreter::new(&mut stdout);
+    println!("================ Program StdOut ================");
+    match interpreter.interpret(&stmts) {
+        Ok(_) => match stdout.flush() {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                eprintln!("[ERROR] flushing stdout: {err}");
+                Err(())
+            }
+        },
+        Err(runtime) => {
+            eprintln!("[ERROR] {}", runtime);
+            Err(())
+        }
+    }
 }
