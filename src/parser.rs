@@ -3,13 +3,15 @@
 //!
 //! ```
 //! program         -> declaration* EOF ;
-//! declaration    -> varDecl 
-//!                 | satement ;
+//! declaration    -> varDecl
+//!                 | statement ;
 //! varDecl         -> "var" IDENTIFIER ("=" expression)? ";" ;
 //! statement       -> exprStmt
-//!                 | printStmt ;
+//!                 | printStmt
+//!                 | block ;
 //! exprStmt        -> expression ";"
 //! printStmt       -> "print" expression ";" ;
+//! block           -> "{" declaration* "}";
 //! expression      -> assignment ;
 //! assignment      -> IDENTIFIER "=" assignment
 //!                 | equality ;
@@ -67,10 +69,13 @@ impl<'t> Parser<'t> {
     fn var_declaration(&mut self) -> Result<Stmt, ParserError> {
         let name = match &self.peek().ty {
             TokenType::Identifier(ident) => ident.clone(),
-            _ => return  Err(ParserError::UnexpectedToken { 
-                expected: TokenType::Identifier(String::new()), 
-                got: self.peek().ty.clone(), 
-                pos: self.peek().pos })
+            _ => {
+                return Err(ParserError::UnexpectedToken {
+                    expected: TokenType::Identifier(String::new()),
+                    got: self.peek().ty.clone(),
+                    pos: self.peek().pos,
+                });
+            }
         };
 
         self.advance();
@@ -80,17 +85,42 @@ impl<'t> Parser<'t> {
         } else {
             None
         };
-        self.consume(TokenType::Semicolon, ParserError::UnexpectedToken { expected: TokenType::Semicolon, got: self.peek().ty.clone(), pos: self.peek().pos })?;
+        self.consume(
+            TokenType::Semicolon,
+            ParserError::UnexpectedToken {
+                expected: TokenType::Semicolon,
+                got: self.peek().ty.clone(),
+                pos: self.peek().pos,
+            },
+        )?;
 
         Ok(Stmt::Var { name, initializer })
-
     }
 
     fn statement(&mut self) -> Result<Stmt, ParserError> {
         if self.match_token(&[TokenType::Print]) {
             return self.print_stmt();
         }
+        if self.match_token(&[TokenType::LeftCurly]) {
+            return self.block();
+        }
         self.expr_stmt()
+    }
+
+    fn block(&mut self) -> Result<Stmt, ParserError> {
+        let mut stmts = Vec::new();
+        while !self.is_eof() && self.peek().ty != TokenType::RightCurly {
+            stmts.push(self.declaration()?);
+        }
+        self.consume(
+            TokenType::RightCurly,
+            ParserError::UnexpectedToken {
+                expected: TokenType::RightCurly,
+                got: self.peek().ty.clone(),
+                pos: self.peek().pos,
+            },
+        )?;
+        Ok(Stmt::Block(stmts))
     }
 
     fn print_stmt(&mut self) -> Result<Stmt, ParserError> {
@@ -128,13 +158,17 @@ impl<'t> Parser<'t> {
         if self.match_token(&[TokenType::Eq]) {
             let value = self.assignment()?; // right-associative
             if let Expr::Variable(name) = expr {
-                return Ok(Expr::Assign { name, value: Box::new(value) })
+                return Ok(Expr::Assign {
+                    name,
+                    value: Box::new(value),
+                });
             }
-            return Err(ParserError::InvalidAssignmentTarget { pos: self.peek().pos });
+            return Err(ParserError::InvalidAssignmentTarget {
+                pos: self.peek().pos,
+            });
         }
 
         Ok(expr)
-
     }
 
     fn equality(&mut self) -> Result<Expr, ParserError> {
@@ -228,8 +262,7 @@ impl<'t> Parser<'t> {
 
         if let TokenType::Identifier(name) = &self.peek().ty.clone() {
             self.advance();
-            return Ok(Expr::Variable(name.clone()))
-
+            return Ok(Expr::Variable(name.clone()));
         }
 
         if self.match_token(&[TokenType::LeftParen]) {
@@ -244,8 +277,6 @@ impl<'t> Parser<'t> {
             )?;
             return Ok(Expr::Grouping(Box::new(expr)));
         }
-
-
 
         Err(ParserError::UnknwonError {
             last_token: self.tokens[self.cursor].clone(),

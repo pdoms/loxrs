@@ -8,7 +8,11 @@ use crate::{
 pub enum Stmt {
     Print(Expr),
     Expression(Expr),
-    Var {name: String, initializer: Option<Expr>} // initializer is optional
+    Var {
+        name: String,
+        initializer: Option<Expr>,
+    }, // initializer is optional
+    Block(Vec<Stmt>),
 }
 
 pub enum Expr {
@@ -24,8 +28,10 @@ pub enum Expr {
     },
     Grouping(Box<Expr>),
     Variable(String),
-    Assign {name: String, value: Box<Expr>}
-
+    Assign {
+        name: String,
+        value: Box<Expr>,
+    },
 }
 
 impl Display for Expr {
@@ -36,7 +42,7 @@ impl Display for Expr {
             Expr::Binary { op, right, left } => write!(f, "({} {} {})", left, op, right),
             Expr::Grouping(expr) => write!(f, "(group {})", expr),
             Expr::Variable(name) => write!(f, "<{}>", name),
-            Expr::Assign {name, value} => write!(f, "<{}> = {}", name, value),
+            Expr::Assign { name, value } => write!(f, "<{}> = {}", name, value),
         }
     }
 }

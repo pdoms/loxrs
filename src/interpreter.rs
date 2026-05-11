@@ -1,6 +1,7 @@
-
 use crate::{
-    environment::Environment, errors::RuntimeError, nodes::{Expr, Lit, Op, Stmt}
+    environment::Environment,
+    errors::RuntimeError,
+    nodes::{Expr, Lit, Op, Stmt},
 };
 
 fn is_truthy(lit: &Lit) -> bool {
@@ -14,13 +15,15 @@ fn is_truthy(lit: &Lit) -> bool {
 /// We use `W` (output) to test print statements.
 pub struct Interpreter<W: std::io::Write> {
     output: W,
-    environment: Environment 
+    environments: Vec<Environment>, // we handle scope like a stack
 }
 
 impl<W: std::io::Write> Interpreter<W> {
-    pub fn new(output:  W) -> Self {
-        Self {output, environment: Environment::new()}
-
+    pub fn new(output: W) -> Self {
+        Self {
+            output,
+            environments: vec![Environment::new()],
+        }
     }
 
     pub fn interpret(&mut self, stmts: &[Stmt]) -> Result<(), RuntimeError> {
@@ -35,51 +38,85 @@ impl<W: std::io::Write> Interpreter<W> {
             Expr::Literal(lit) => Ok(lit.clone()),
             Expr::Grouping(inner) => self.eval(inner),
             Expr::Unary { op, right } => {
-                        let right = self.eval(right)?;
-                        match op {
-                            Op::Not => Ok(Lit::Bool(!is_truthy(&right))),
-                            Op::Sub => match right {
-                                Lit::Number(n) => Ok(Lit::Number(-n)),
-                                _ => Err(RuntimeError::TypeError {
-                                    msg: "operand must be a number".to_string(),
-                                }),
-                            },
-                            _ => Err(RuntimeError::TypeError {
-                                msg: "invalid unary operator".to_string(),
-                            }),
-                        }
-                    }
+                let right = self.eval(right)?;
+                match op {
+                    Op::Not => Ok(Lit::Bool(!is_truthy(&right))),
+                    Op::Sub => match right {
+                        Lit::Number(n) => Ok(Lit::Number(-n)),
+                        _ => Err(RuntimeError::TypeError {
+                            msg: "operand must be a number".to_string(),
+                        }),
+                    },
+                    _ => Err(RuntimeError::TypeError {
+                        msg: "invalid unary operator".to_string(),
+                    }),
+                }
+            }
             Expr::Binary { op, right, left } => {
-                        let left = self.eval(left)?;
-                        let right = self.eval(right)?;
+                let left = self.eval(left)?;
+                let right = self.eval(right)?;
 
-                        match op {
-                            Op::Equal => Ok(Lit::Bool(left == right)),
-                            Op::NotEqual => Ok(Lit::Bool(left != right)),
-                            Op::LessThan => left.less(right),
-                            Op::LessThanEqual => left.less_eq(right),
-                            Op::GreaterThan => left.greater(right),
-                            Op::GreaterThanEqual => left.greater_eq(right),
-                            Op::Add => left.add(right),
-                            Op::Sub => left.sub(right),
-                            Op::Mul => left.mul(right),
-                            Op::Div => left.div(right),
-                            _ => Err(RuntimeError::InvalidOperator {
-                                msg: format!("'{}' is not a valid binary operator", op),
-                            }),
-                        }
-                    }
-            Expr::Variable(name) => {
-                        self.environment.get(name).cloned()
-                    }
+                match op {
+                    Op::Equal => Ok(Lit::Bool(left == right)),
+                    Op::NotEqual => Ok(Lit::Bool(left != right)),
+                    Op::LessThan => left.less(right),
+                    Op::LessThanEqual => left.less_eq(right),
+                    Op::GreaterThan => left.greater(right),
+                    Op::GreaterThanEqual => left.greater_eq(right),
+                    Op::Add => left.add(right),
+                    Op::Sub => left.sub(right),
+                    Op::Mul => left.mul(right),
+                    Op::Div => left.div(right),
+                    _ => Err(RuntimeError::InvalidOperator {
+                        msg: format!("'{}' is not a valid binary operator", op),
+                    }),
+                }
+            }
+            Expr::Variable(name) => self.get_var(name).cloned(),
             Expr::Assign { name, value } => {
                 let value = self.eval(value)?;
-                match self.environment.get_mut(name) {
-                    Ok(slot) => {*slot = value.clone(); Ok(value)}
-                    Err(err) => Err(err)
-                }
-            },
+                self.set(name, value)
+                    .ok_or(RuntimeError::UndefinedVariable {
+                        var_name: name.to_owned(),
+                    })
+            }
         }
+    }
+
+    fn enter_scope(&mut self) {
+        self.environments.push(Environment::new());
+    }
+
+    fn exit_scope(&mut self) {
+        self.environments.pop();
+    }
+
+    fn get_var(&self, name: &String) -> Result<&Lit, RuntimeError> {
+        // inner most is last, so we iter reversed
+        for env in self.environments.iter().rev() {
+            if let Ok(val) = env.get(name) {
+                return Ok(val);
+            }
+        }
+        Err(RuntimeError::UndefinedVariable {
+            var_name: name.to_owned(),
+        })
+    }
+
+    /// is used for x = 5, after var has been already defined
+    fn set(&mut self, name: &String, value: Lit) -> Option<Lit> {
+        for env in self.environments.iter_mut().rev() {
+            if env.contains_key(name) {
+                env.insert(name, value.clone());
+                return Some(value);
+            }
+        }
+        return None;
+    }
+
+    /// is used at var x = 5
+    fn define(&mut self, name: &str, value: Lit) {
+        self.environments.last_mut().unwrap().insert(name, value);
     }
 
     pub fn execute(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
@@ -89,28 +126,37 @@ impl<W: std::io::Write> Interpreter<W> {
                 let _ = writeln!(self.output, "{}", value);
                 self.output.flush().expect("flushing output");
                 Ok(())
-            },
+            }
             Stmt::Expression(expr) => {
                 self.eval(expr)?;
                 Ok(())
-            },
+            }
             Stmt::Var { name, initializer } => {
                 let value = match initializer {
                     Some(expr) => self.eval(expr)?,
                     None => Lit::Nil,
                 };
-                self.environment.insert(name.as_str(), value);
+                self.define(name.as_str(), value);
                 Ok(())
+            }
+            Stmt::Block(stmts) => {
+                self.enter_scope();
+                let result = stmts.iter().try_for_each(|s| self.execute(s));
+                self.exit_scope();
+                result
             }
         }
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use crate::{
-        errors::RuntimeError, interpreter::Interpreter, nodes::{Lit, Stmt}, parser::Parser, scanner::Scanner
+        errors::RuntimeError,
+        interpreter::Interpreter,
+        nodes::{Lit, Stmt},
+        parser::Parser,
+        scanner::Scanner,
     };
 
     fn do_eval(case: &str) -> Result<Lit, RuntimeError> {
@@ -226,9 +272,9 @@ mod test {
     #[test]
     fn simple_stmts() {
         let cases = vec![
-            ("print 5 + 3 * 2;"      , "11\n"),
+            ("print 5 + 3 * 2;", "11\n"),
             ("print \"hello world\";", "hello world\n"),
-            ("1 + 2;"                , "")
+            ("1 + 2;", ""),
         ];
         for (case, exp) in cases {
             let mut scanner = Scanner::new(case.as_bytes());
@@ -245,9 +291,9 @@ mod test {
     #[test]
     fn variables() {
         let cases = vec![
-            ("var x = 5; print x;"      , "5\n"),
-            ("var x; print x;",         "nil\n"),
-            ("var x = 5 + 3; print x;",  "8\n")
+            ("var x = 5; print x;", "5\n"),
+            ("var x; print x;", "nil\n"),
+            ("var x = 5 + 3; print x;", "8\n"),
         ];
         for (case, exp) in cases {
             let mut scanner = Scanner::new(case.as_bytes());
@@ -278,12 +324,15 @@ mod test {
     fn assignments() {
         let cases = vec![
             ("var x = 5; x = 10; print x;", "10\n"), // basic assignement
-            ("var x = 5; print x = 10;",    "10\n"),   // assignment is an expression!
-            ("var a = 1; var b = 2; a = b = 3; print a; print b;", "3\n3\n"), // right associative
+            ("var x = 5; print x = 10;", "10\n"),    // assignment is an expression!
+            (
+                "var a = 1; var b = 2; a = b = 3; print a; print b;",
+                "3\n3\n",
+            ), // right associative
             ("var x = 0; x = 5 + 3; print x;", "8\n"),
             ("var x; x = 2; print x; x = 3; print x;", "2\n3\n"),
             ("var x = 5; var y = 0; y = x; print y;", "5\n"),
-            ("var x = 5; print x; x = \"hello\"; print x;", "5\nhello\n")
+            ("var x = 5; print x; x = \"hello\"; print x;", "5\nhello\n"),
         ];
         for (case, exp) in cases {
             let mut scanner = Scanner::new(case.as_bytes());
@@ -309,5 +358,48 @@ mod test {
         } else {
             assert!(false, "unreachable at variables")
         }
+    }
+
+    #[test]
+    fn scope() {
+        let cases = vec![
+            // inner scope shadows outer
+            ("var x = 1; { var x = 2; print x; } print x;", "2\n1\n"),
+            // inner scope sees outer variable
+            ("var x = 1; { print x; }", "1\n"),
+            // inner assignment affects outer
+            ("var x = 1; { x = 2; } print x;", "2\n"),
+            // nested scopes
+            (
+                "var x = 1; { var x = 2; { var x = 3; print x; } print x; } print x;",
+                "3\n2\n1\n",
+            ),
+            // nested scope inner assign affects nearest declaration
+            (
+                "var x = 1; { var x = 2; { x = 3; } print x; } print x;",
+                "3\n1\n",
+            ),
+            // multiple variables in scope
+            (
+                "var x = 1; var y = 2; { var y = 3; print x; print y; } print y;",
+                "1\n3\n2\n",
+            ),
+            // declare in scope, assign from outer
+            ("var x = 1; { var y = x + 1; print y; }", "2\n"),
+        ];
+        for (case, exp) in cases {
+            let mut scanner = Scanner::new(case.as_bytes());
+            let _ = scanner.parse().unwrap();
+            let mut parser = Parser::new(&scanner.tokens);
+            let stmts = parser.parse().unwrap();
+            let mut out = Vec::new();
+            let mut interpreter = Interpreter::new(&mut out);
+            assert!(interpreter.interpret(&stmts).is_ok());
+            assert_eq!(str::from_utf8(&out).unwrap(), exp);
+        }
+        let error_case = "x = 5;";
+
+        // variable does not leak out of scope
+        //"{ var x = 1; } print x;"                          ,  Err(UndefinedVariable)
     }
 }

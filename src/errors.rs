@@ -39,23 +39,26 @@ pub enum ParserError {
     UnknwonError {
         last_token: Token,
     },
-    InvalidAssignmentTarget { pos: (usize, usize) }
+    InvalidAssignmentTarget {
+        pos: (usize, usize),
+    },
 }
 impl Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ParserError::UnexpectedToken { expected, got, pos } => write!(
-                        f,
-                        "{}:{} unexpected token. Expected: {} got: {}",
-                        pos.0, pos.1, expected, got
-                    ),
+                f,
+                "{}:{} unexpected token. Expected: {} got: {}",
+                pos.0, pos.1, expected, got
+            ),
             ParserError::UnknwonError { last_token } => write!(
-                        f,
-                        "{}:{} unknown error. Last token: {}",
-                        last_token.pos.0, last_token.pos.1, last_token.ty
-                    ),
-            ParserError::InvalidAssignmentTarget { pos } => write!(f, 
-                "{}:{} invalid assigment target", pos.0, pos.1),
+                f,
+                "{}:{} unknown error. Last token: {}",
+                last_token.pos.0, last_token.pos.1, last_token.ty
+            ),
+            ParserError::InvalidAssignmentTarget { pos } => {
+                write!(f, "{}:{} invalid assigment target", pos.0, pos.1)
+            }
         }
     }
 }
@@ -66,7 +69,7 @@ pub enum RuntimeError {
     TypeError { msg: String },
     InvalidOperator { msg: String },
     DivisionByZero,
-    UndefinedVariable {var_name: String}
+    UndefinedVariable { var_name: String },
 }
 impl Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -74,7 +77,9 @@ impl Display for RuntimeError {
             RuntimeError::TypeError { msg } => write!(f, "TypeError: {msg}"),
             RuntimeError::InvalidOperator { msg } => write!(f, "InvalidOperator: {msg}"),
             RuntimeError::DivisionByZero => write!(f, "DivisionByZero"),
-            RuntimeError::UndefinedVariable { var_name } => write!(f, "UndefinedVariable: '{var_name}'"),
+            RuntimeError::UndefinedVariable { var_name } => {
+                write!(f, "UndefinedVariable: '{var_name}'")
+            }
         }
     }
 }
