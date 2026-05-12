@@ -36,6 +36,16 @@ impl<W: std::io::Write> Interpreter<W> {
     pub fn eval(&mut self, expr: &Expr) -> Result<Lit, RuntimeError> {
         match expr {
             Expr::Literal(lit) => Ok(lit.clone()),
+            Expr::Logical { left, op, right } => {
+                let left = self.eval(left)?;
+                match op {
+                    Op::And => if !is_truthy(&left) { return Ok(left); },
+                    Op::Or => if is_truthy(&left) { return Ok(left); },
+                    _ => unreachable!("parsers should never produce on-logical op in Expr::Logical") 
+                }
+                let right = self.eval(right)?;
+                Ok(right)
+            }
             Expr::Grouping(inner) => self.eval(inner),
             Expr::Unary { op, right } => {
                 let right = self.eval(right)?;
@@ -449,5 +459,47 @@ mod test {
             assert!(interpreter.interpret(&stmts).is_ok());
             assert_eq!(str::from_utf8(&out).unwrap(), exp);
         }
+    }
+
+    #[test]
+    fn logical_and_or() {
+        let cases = vec![
+            // and
+            ("print true and true;"       ,"true\n"),
+            ("print true and false;"      ,"false\n"),
+            ("print false and true;"      ,"false\n"),
+            ("print false and false;"     ,"false\n"),
+            // or
+            ("print true or false;"       ,"true\n"),
+            ("print false or true;"       ,"true\n"),
+            ("print false or false;"      ,"false\n"),
+            ("print true or true;"        ,"true\n"),
+            // short circuit and — right side never evaluated
+            ("print false and (1/0);"     ,"false\n"),  // no DivisionByZero error
+            // short circuit or — right side never evaluated  
+            ("print true or (1/0);"       ,"true\n"),   // no DivisionByZero error
+            // with variables
+            ("var x = true; var y = false; print x and y;","false\n"),
+            ("var x = true; var y = false; print x or y;", "true\n"),
+            // truthiness
+            ("print nil and true;"       ,  "nil\n"),    // nil is falsy, short circuits
+            ("print nil or true;"        ,  "true\n"),
+            ("print 0 or false;"         ,  "0\n"),     // 0 is truthy in Lox!
+           ("print 0 and true;"         ,  "true\n"),      // 0 is truthy in Lox!
+           // chained
+           ("print true and true and false;",  "false\n"),
+           ("print false or false or true;" ,  "true\n"),
+        ];
+        for (case, exp) in cases {
+            let mut scanner = Scanner::new(case.as_bytes());
+            let _ = scanner.parse().unwrap();
+            let mut parser = Parser::new(&scanner.tokens);
+            let stmts = parser.parse().unwrap();
+            let mut out = Vec::new();
+            let mut interpreter = Interpreter::new(&mut out);
+            assert!(interpreter.interpret(&stmts).is_ok());
+            assert_eq!(str::from_utf8(&out).unwrap(), exp, "case: {case}");
+        }
+
     }
 }

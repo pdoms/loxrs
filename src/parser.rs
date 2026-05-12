@@ -17,7 +17,9 @@
 //! block           -> "{" declaration* "}" ;
 //! expression      -> assignment ;
 //! assignment      -> IDENTIFIER "=" assignment
-//!                 | equality ;
+//!                 | logic_or ;
+//! logic_or        -> logic_and ( "or" logic_and )* ;
+//! logic_and       -> equality ( "and" equality )* ;
 //! equality        -> comparison ( ( "!=" | "==" ) comparison )* ;
 //! comparison      -> term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 //! term            -> factor ( ( "-" | "+" ) factor )* ;
@@ -193,7 +195,9 @@ impl<'t> Parser<'t> {
     }
 
     fn assignment(&mut self) -> Result<Expr, ParserError> {
-        let expr = self.equality()?;
+
+        let expr = self.or()?;
+
         if self.match_token(&[TokenType::Eq]) {
             let value = self.assignment()?; // right-associative
             if let Expr::Variable(name) = expr {
@@ -208,6 +212,26 @@ impl<'t> Parser<'t> {
         }
 
         Ok(expr)
+    }
+
+    fn or(&mut self) -> Result<Expr, ParserError> {
+        let mut left = self.and()?;
+        while self.match_token(&[TokenType::Or]) {
+            let op = Op::from(&self.tokens[self.cursor - 1].ty);
+            let right = self.and()?;
+            left = Expr::Logical { left: Box::new(left), op, right: Box::new(right) }
+        }
+        Ok(left)
+    } 
+
+    fn and(&mut self) -> Result<Expr, ParserError> {
+        let mut left = self.equality()?;
+        while self.match_token(&[TokenType::And]) {
+            let op = Op::from(&self.tokens[self.cursor - 1].ty);
+            let right = self.equality()?;
+            left = Expr::Logical { left: Box::new(left), op, right: Box::new(right) }
+        }
+        Ok(left)
     }
 
     fn equality(&mut self) -> Result<Expr, ParserError> {

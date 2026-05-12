@@ -22,6 +22,7 @@ pub enum Stmt {
 
 pub enum Expr {
     Literal(Lit),
+    Logical {left: Box<Expr>, op: Op, right: Box<Expr>},
     Unary {
         op: Op,
         right: Box<Expr>,
@@ -43,6 +44,7 @@ impl Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Expr::Literal(lit) => write!(f, "{}", lit),
+            Expr::Logical { op, right, left } => write!(f, "({} {} {})", left, op, right),
             Expr::Unary { op, right } => write!(f, "({} {})", op, right),
             Expr::Binary { op, right, left } => write!(f, "({} {} {})", left, op, right),
             Expr::Grouping(expr) => write!(f, "(group {})", expr),
@@ -182,6 +184,8 @@ pub enum Op {
     Mul,
     Div,
     Not,
+    And,
+    Or
 }
 
 impl Display for Op {
@@ -198,6 +202,8 @@ impl Display for Op {
             Op::Mul => f.write_str("*"),
             Op::Div => f.write_str("/"),
             Op::Not => f.write_str("!"),
+            Op::And => f.write_str("and"),
+            Op::Or => f.write_str("or"),
         }
     }
 }
@@ -216,6 +222,8 @@ impl From<&TokenType> for Op {
             TokenType::LessEq => Op::LessThanEqual,
             TokenType::BangEq => Op::NotEqual,
             TokenType::Bang => Op::Not,
+            TokenType::And => Op::And,
+            TokenType::Or => Op::Or,
             _ => unimplemented!("attempted to convert {:?} to operator", tok_ty),
         }
     }
