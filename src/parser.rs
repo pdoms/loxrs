@@ -7,11 +7,14 @@
 //!                 | statement ;
 //! varDecl         -> "var" IDENTIFIER ("=" expression)? ";" ;
 //! statement       -> exprStmt
+//!                 | ifStmt
 //!                 | printStmt
 //!                 | block ;
 //! exprStmt        -> expression ";"
+//! ifStmt          -> "if" "(" expression ")" statement
+//!                 ( "else" statement )? ;
 //! printStmt       -> "print" expression ";" ;
-//! block           -> "{" declaration* "}";
+//! block           -> "{" declaration* "}" ;
 //! expression      -> assignment ;
 //! assignment      -> IDENTIFIER "=" assignment
 //!                 | equality ;
@@ -22,7 +25,7 @@
 //! unary           -> ( "!" | "-" ) unary
 //!                 | primary ;
 //! primary         -> NUMBER | STRING | "true" | "false" | "nil"
-//!                 | "(" expression ")" | IDENTIFIER;
+//!                 | "(" expression ")" | IDENTIFIER ;
 //! ```
 use crate::{
     errors::ParserError,
@@ -101,10 +104,46 @@ impl<'t> Parser<'t> {
         if self.match_token(&[TokenType::Print]) {
             return self.print_stmt();
         }
+
+        if self.match_token(&[TokenType::If]) {
+            return self.if_statement();
+        }
+
         if self.match_token(&[TokenType::LeftCurly]) {
             return self.block();
         }
         self.expr_stmt()
+    }
+
+    fn if_statement(&mut self) -> Result<Stmt, ParserError> {
+        self.consume(
+            TokenType::LeftParen,
+            ParserError::UnexpectedToken {
+                expected: TokenType::LeftParen,
+                got: self.peek().ty.clone(),
+                pos: self.peek().pos,
+            },
+        )?;
+        let condition = self.expression()?;
+        self.consume(
+            TokenType::RightParen,
+            ParserError::UnexpectedToken {
+                expected: TokenType::RightParen,
+                got: self.peek().ty.clone(),
+                pos: self.peek().pos,
+            },
+        )?;
+        let then_branch = Box::new(self.statement()?);
+        let else_branch = if self.match_token(&[TokenType::Else]) {
+            Some(Box::new(self.statement()?))
+        } else {
+            None
+        };
+        Ok(Stmt::If {
+            condition,
+            then_branch,
+            else_branch,
+        })
     }
 
     fn block(&mut self) -> Result<Stmt, ParserError> {

@@ -145,6 +145,18 @@ impl<W: std::io::Write> Interpreter<W> {
                 self.exit_scope();
                 result
             }
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                if is_truthy(&self.eval(condition)?) {
+                    self.execute(then_branch)?;
+                } else if let Some(else_branch) = else_branch {
+                    self.execute(else_branch)?;
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -411,6 +423,31 @@ mod test {
             assert!(var_name.as_str() == "x");
         } else {
             assert!(false, "unreachable at variables")
+        }
+    }
+
+    #[test]
+    fn if_statements() {
+        let cases = vec![
+            ("if (true) print 1;", "1\n"),
+            ("if (false) print 1;", ""),
+            ("if (true) print 1; else print 2;", "1\n"),
+            ("if (false) print 1; else print 2;", "2\n"),
+            ("var x = 5; if (x > 3) print x;", "5\n"),
+            ("if (1 == 1) { print 1; print 2; }", "1\n2\n"),
+            ("if (false) print 1; else { print 2; print 3; }", "2\n3\n"),
+            // dangling else — else binds to nearest if
+            ("if (true) if (false) print 1; else print 2;", "2\n"),
+        ];
+        for (case, exp) in cases {
+            let mut scanner = Scanner::new(case.as_bytes());
+            let _ = scanner.parse().unwrap();
+            let mut parser = Parser::new(&scanner.tokens);
+            let stmts = parser.parse().unwrap();
+            let mut out = Vec::new();
+            let mut interpreter = Interpreter::new(&mut out);
+            assert!(interpreter.interpret(&stmts).is_ok());
+            assert_eq!(str::from_utf8(&out).unwrap(), exp);
         }
     }
 }
