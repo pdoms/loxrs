@@ -1,3 +1,4 @@
+
 use crate::{
     environment::Environment,
     errors::RuntimeError,
@@ -39,9 +40,19 @@ impl<W: std::io::Write> Interpreter<W> {
             Expr::Logical { left, op, right } => {
                 let left = self.eval(left)?;
                 match op {
-                    Op::And => if !is_truthy(&left) { return Ok(left); },
-                    Op::Or => if is_truthy(&left) { return Ok(left); },
-                    _ => unreachable!("parsers should never produce on-logical op in Expr::Logical") 
+                    Op::And => {
+                        if !is_truthy(&left) {
+                            return Ok(left);
+                        }
+                    }
+                    Op::Or => {
+                        if is_truthy(&left) {
+                            return Ok(left);
+                        }
+                    }
+                    _ => {
+                        unreachable!("parsers should never produce on-logical op in Expr::Logical")
+                    }
                 }
                 let right = self.eval(right)?;
                 Ok(right)
@@ -167,6 +178,12 @@ impl<W: std::io::Write> Interpreter<W> {
                 }
                 Ok(())
             }
+            Stmt::While { condition, body } => {
+                while is_truthy(&self.eval(condition)?) {
+                    self.execute(body)?;
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -197,13 +214,13 @@ mod test {
     #[test]
     fn eval_arithmetic_expressions() {
         let cases = vec![
-            ("1 + 2", Ok(Lit::Number(3.0))),
-            ("10 - 3", Ok(Lit::Number(7.0))),
-            ("3 * 4", Ok(Lit::Number(12.0))),
-            ("10 / 2", Ok(Lit::Number(5.0))),
-            ("5 + 3 * 2", Ok(Lit::Number(11.0))),
-            ("(5 + 3) * 2", Ok(Lit::Number(16.0))),
-            ("10 / 0", Err(RuntimeError::DivisionByZero)),
+            ("1 + 2;", Ok(Lit::Number(3.0))),
+            ("10 - 3;", Ok(Lit::Number(7.0))),
+            ("3 * 4;", Ok(Lit::Number(12.0))),
+            ("10 / 2;", Ok(Lit::Number(5.0))),
+            ("5 + 3 * 2;", Ok(Lit::Number(11.0))),
+            ("(5 + 3) * 2;", Ok(Lit::Number(16.0))),
+            ("10 / 0;", Err(RuntimeError::DivisionByZero)),
         ];
 
         for (case, exp) in cases {
@@ -218,11 +235,11 @@ mod test {
     #[test]
     fn eval_unary_expressions() {
         let cases = vec![
-            ("-5", Lit::Number(-5.0)),
-            ("--5", Lit::Number(5.0)),
-            ("!true", Lit::Bool(false)),
-            ("!false", Lit::Bool(true)),
-            ("!nil", Lit::Bool(true)),
+            ("-5;", Lit::Number(-5.0)),
+            ("--5;", Lit::Number(5.0)),
+            ("!true;", Lit::Bool(false)),
+            ("!false;", Lit::Bool(true)),
+            ("!nil;", Lit::Bool(true)),
         ];
 
         for (case, exp) in cases {
@@ -234,11 +251,11 @@ mod test {
     #[test]
     fn eval_comparison_expressions() {
         let cases = vec![
-            ("5 > 3", Lit::Bool(true)),
-            ("3 > 5", Lit::Bool(false)),
-            ("5 >= 5", Lit::Bool(true)),
-            ("3 < 5", Lit::Bool(true)),
-            ("5 <= 4", Lit::Bool(false)),
+            ("5 > 3;", Lit::Bool(true)),
+            ("3 > 5;", Lit::Bool(false)),
+            ("5 >= 5;", Lit::Bool(true)),
+            ("3 < 5;", Lit::Bool(true)),
+            ("5 <= 4;", Lit::Bool(false)),
         ];
 
         for (case, exp) in cases {
@@ -250,12 +267,12 @@ mod test {
     #[test]
     fn eval_equality_expressions() {
         let cases = vec![
-            ("1 == 1", Lit::Bool(true)),
-            ("1 == 2", Lit::Bool(false)),
-            ("1 != 2", Lit::Bool(true)),
-            ("nil == nil", Lit::Bool(true)),
-            ("true == true", Lit::Bool(true)),
-            ("true == false", Lit::Bool(false)),
+            ("1 == 1;", Lit::Bool(true)),
+            ("1 == 2;", Lit::Bool(false)),
+            ("1 != 2;", Lit::Bool(true)),
+            ("nil == nil;", Lit::Bool(true)),
+            ("true == true;", Lit::Bool(true)),
+            ("true == false;", Lit::Bool(false)),
         ];
 
         for (case, exp) in cases {
@@ -268,11 +285,11 @@ mod test {
     fn eval_string_expressions() {
         let cases = vec![
             (
-                "\"hello\" + \" world\"",
+                "\"hello\" + \" world\";",
                 Lit::String("hello world".to_string()),
             ),
-            ("\"a\" == \"a\"", Lit::Bool(true)),
-            ("\"a\" == \"b\"", Lit::Bool(false)),
+            ("\"a\" == \"a\";", Lit::Bool(true)),
+            ("\"a\" == \"b\";", Lit::Bool(false)),
         ];
 
         for (case, exp) in cases {
@@ -283,7 +300,7 @@ mod test {
 
     #[test]
     fn eval_type_errors_expressions() {
-        let cases = vec!["\"hello\" - 1", "true + 1", "-true", "\"a\" > \"b\""];
+        let cases = vec!["\"hello\" - 1;", "true + 1;", "-true;", "\"a\" > \"b\";"];
 
         for case in cases {
             let result = do_eval(case);
@@ -465,30 +482,30 @@ mod test {
     fn logical_and_or() {
         let cases = vec![
             // and
-            ("print true and true;"       ,"true\n"),
-            ("print true and false;"      ,"false\n"),
-            ("print false and true;"      ,"false\n"),
-            ("print false and false;"     ,"false\n"),
+            ("print true and true;", "true\n"),
+            ("print true and false;", "false\n"),
+            ("print false and true;", "false\n"),
+            ("print false and false;", "false\n"),
             // or
-            ("print true or false;"       ,"true\n"),
-            ("print false or true;"       ,"true\n"),
-            ("print false or false;"      ,"false\n"),
-            ("print true or true;"        ,"true\n"),
+            ("print true or false;", "true\n"),
+            ("print false or true;", "true\n"),
+            ("print false or false;", "false\n"),
+            ("print true or true;", "true\n"),
             // short circuit and — right side never evaluated
-            ("print false and (1/0);"     ,"false\n"),  // no DivisionByZero error
-            // short circuit or — right side never evaluated  
-            ("print true or (1/0);"       ,"true\n"),   // no DivisionByZero error
+            ("print false and (1/0);", "false\n"), // no DivisionByZero error
+            // short circuit or — right side never evaluated
+            ("print true or (1/0);", "true\n"), // no DivisionByZero error
             // with variables
-            ("var x = true; var y = false; print x and y;","false\n"),
+            ("var x = true; var y = false; print x and y;", "false\n"),
             ("var x = true; var y = false; print x or y;", "true\n"),
             // truthiness
-            ("print nil and true;"       ,  "nil\n"),    // nil is falsy, short circuits
-            ("print nil or true;"        ,  "true\n"),
-            ("print 0 or false;"         ,  "0\n"),     // 0 is truthy in Lox!
-           ("print 0 and true;"         ,  "true\n"),      // 0 is truthy in Lox!
-           // chained
-           ("print true and true and false;",  "false\n"),
-           ("print false or false or true;" ,  "true\n"),
+            ("print nil and true;", "nil\n"), // nil is falsy, short circuits
+            ("print nil or true;", "true\n"),
+            ("print 0 or false;", "0\n"),    // 0 is truthy in Lox!
+            ("print 0 and true;", "true\n"), // 0 is truthy in Lox!
+            // chained
+            ("print true and true and false;", "false\n"),
+            ("print false or false or true;", "true\n"),
         ];
         for (case, exp) in cases {
             let mut scanner = Scanner::new(case.as_bytes());
@@ -500,6 +517,86 @@ mod test {
             assert!(interpreter.interpret(&stmts).is_ok());
             assert_eq!(str::from_utf8(&out).unwrap(), exp, "case: {case}");
         }
-
     }
+
+    #[test]
+    fn while_loops() {
+        let cases = vec![
+            // basic
+            ("var x = 0; while (x < 3) { x = x + 1; } print x;", "3\n"),
+            // never executes
+            ("var x = 0; while (false) { x = x + 1; } print x;", "0\n"),
+            // countdown
+            (
+                "var x = 3; while (x > 0) { print x; x = x - 1; }",
+                "3\n2\n1\n",
+            ),
+            // accumulator
+            (
+                "var sum = 0; var i = 1; while (i <= 3) { sum = sum + i; i = i + 1; } print sum;",
+                "6\n",
+            ),
+        ];
+        for (case, exp) in cases {
+            let mut scanner = Scanner::new(case.as_bytes());
+            let _ = scanner.parse().unwrap();
+            let mut parser = Parser::new(&scanner.tokens);
+            let stmts = parser.parse().unwrap();
+            let mut out = Vec::new();
+            let mut interpreter = Interpreter::new(&mut out);
+            assert!(interpreter.interpret(&stmts).is_ok());
+            assert_eq!(str::from_utf8(&out).unwrap(), exp);
+        }
+    }
+
+   #[test]
+   fn for_loops() {
+       let cases = vec![
+           // basic counting
+           ("for (var i = 0; i < 3; i = i + 1) print i;" ,  "0\n1\n2\n"),
+
+           // accumulator
+           ("var sum = 0; for (var i = 1; i <= 3; i = i + 1) { sum = sum + i; } print sum;",  "6\n"),
+
+           // no initializer
+           ("var i = 0; for (; i < 3; i = i + 1) print i;",  "0\n1\n2\n"),
+
+           // no increment
+           ("for (var i = 0; i < 3;) { print i; i = i + 1; }",  "0\n1\n2\n")
+       ];
+       for (case, exp) in cases {
+           let mut scanner = Scanner::new(case.as_bytes());
+           let _ = scanner.parse().unwrap();
+           let mut parser = Parser::new(&scanner.tokens);
+           let stmts = parser.parse().unwrap();
+           let mut out = Vec::new();
+           let mut interpreter = Interpreter::new(&mut out);
+           assert!(interpreter.interpret(&stmts).is_ok());
+           assert_eq!(str::from_utf8(&out).unwrap(), exp);
+       }
+   }
+
+   #[test]
+   fn fibonacci_for_loop() {
+       let code = r#"
+       var a = 0;
+       var temp;
+
+       for (var b = 1; a < 10000; b = temp + b) {
+        print a;
+        temp = a;
+        a = b;
+
+       }
+           "#;
+       let expect = "0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n55\n89\n144\n233\n377\n610\n987\n1597\n2584\n4181\n6765\n";
+           let mut scanner = Scanner::new(code.as_bytes());
+           let _ = scanner.parse().unwrap();
+           let mut parser = Parser::new(&scanner.tokens);
+           let stmts = parser.parse().unwrap();
+           let mut out = Vec::new();
+           let mut interpreter = Interpreter::new(&mut out);
+           assert!(interpreter.interpret(&stmts).is_ok());
+           assert_eq!(str::from_utf8(&out).unwrap(), expect);
+   }
 }

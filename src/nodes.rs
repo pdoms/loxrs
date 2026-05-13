@@ -7,22 +7,30 @@ use crate::{
 
 pub enum Stmt {
     Print(Expr),
-    Expression(Expr),
     Var {
         name: String,
         initializer: Option<Expr>,
     }, // initializer is optional
+    While {
+        condition: Expr,
+        body: Box<Stmt>,
+    },
     Block(Vec<Stmt>),
     If {
         condition: Expr,
         then_branch: Box<Stmt>,
         else_branch: Option<Box<Stmt>>,
     },
+    Expression(Expr),
 }
 
 pub enum Expr {
     Literal(Lit),
-    Logical {left: Box<Expr>, op: Op, right: Box<Expr>},
+    Logical {
+        left: Box<Expr>,
+        op: Op,
+        right: Box<Expr>,
+    },
     Unary {
         op: Op,
         right: Box<Expr>,
@@ -185,7 +193,7 @@ pub enum Op {
     Div,
     Not,
     And,
-    Or
+    Or,
 }
 
 impl Display for Op {

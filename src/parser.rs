@@ -1,19 +1,24 @@
 //! From https://craftinginterpreters.com/parsing-expressions.html
-//! Chapter 6.1
 //!
-//! ```
+//! ==========================================================================
 //! program         -> declaration* EOF ;
-//! declaration    -> varDecl
+//! declaration     -> varDecl
 //!                 | statement ;
 //! varDecl         -> "var" IDENTIFIER ("=" expression)? ";" ;
 //! statement       -> exprStmt
+//!                 | forStmt
 //!                 | ifStmt
 //!                 | printStmt
+//!                 | whileStmt
 //!                 | block ;
 //! exprStmt        -> expression ";"
+//! forStmt         -> "for" "(" (varDecl | exprStmt | ";" )
+//!                     expression? ";"
+//!                     expression? ")" statement ;
 //! ifStmt          -> "if" "(" expression ")" statement
 //!                 ( "else" statement )? ;
 //! printStmt       -> "print" expression ";" ;
+//! whileStmt       -> "while" "(" expression ")" statement ;
 //! block           -> "{" declaration* "}" ;
 //! expression      -> assignment ;
 //! assignment      -> IDENTIFIER "=" assignment
@@ -28,7 +33,8 @@
 //!                 | primary ;
 //! primary         -> NUMBER | STRING | "true" | "false" | "nil"
 //!                 | "(" expression ")" | IDENTIFIER ;
-//! ```
+//! ==========================================================================
+//!
 use crate::{
     errors::ParserError,
     nodes::{Expr, Lit, Op, Stmt},
@@ -107,6 +113,14 @@ impl<'t> Parser<'t> {
             return self.print_stmt();
         }
 
+        if self.match_token(&[TokenType::While]) {
+            return self.while_statement();
+        }
+
+        if self.match_token(&[TokenType::For]) {
+            return self.for_statement();
+        }
+
         if self.match_token(&[TokenType::If]) {
             return self.if_statement();
         }
@@ -117,6 +131,75 @@ impl<'t> Parser<'t> {
         self.expr_stmt()
     }
 
+    fn for_statement(&mut self) -> Result<Stmt, ParserError> {
+        self.consume(
+            TokenType::LeftParen,
+            ParserError::UnexpectedToken {
+                expected: TokenType::LeftParen,
+                got: self.peek().ty.clone(),
+                pos: self.peek().pos,
+            },
+        )?;
+
+        let initializer = if self.match_token(&[TokenType::Semicolon]) {
+            None
+        } else if self.match_token(&[TokenType::Var]) {
+            Some(self.var_declaration()?)
+        } else {
+            Some(self.expr_stmt()?)
+        };
+
+        let condition = if !self.check(&TokenType::Semicolon) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+        self.consume(TokenType::Semicolon, ParserError::UnexpectedToken { expected: TokenType::Semicolon, got: self.peek().ty.clone(), pos: self.peek().pos })?;
+
+        let increment = if !self.check(&TokenType::RightParen) {
+            Some(self.expression()?)
+        } else {None};
+        self.consume(TokenType::RightParen, ParserError::UnexpectedToken { expected: TokenType::RightParen, got: self.peek().ty.clone(), pos: self.peek().pos })?;
+
+        let mut body = self.statement()?;
+
+        if let Some(inc) = increment {
+            body = Stmt::Block(vec![body, Stmt::Expression(inc)]) 
+        }
+
+        body = Stmt::While { condition: condition.unwrap_or(Expr::Literal(Lit::Bool(true))), body: Box::new(body) };
+
+        if let Some(init) = initializer {
+            body = Stmt::Block(vec![init, body])
+        }
+
+        Ok(body)
+    }
+
+    fn while_statement(&mut self) -> Result<Stmt, ParserError> {
+        self.consume(
+            TokenType::LeftParen,
+            ParserError::UnexpectedToken {
+                expected: TokenType::LeftParen,
+                got: self.peek().ty.clone(),
+                pos: self.peek().pos,
+            },
+        )?;
+        let condition = self.expression()?;
+        self.consume(
+            TokenType::RightParen,
+            ParserError::UnexpectedToken {
+                expected: TokenType::RightParen,
+                got: self.peek().ty.clone(),
+                pos: self.peek().pos,
+            },
+        )?;
+        let body = self.statement()?;
+        Ok(Stmt::While {
+            condition,
+            body: Box::new(body),
+        })
+    }
     fn if_statement(&mut self) -> Result<Stmt, ParserError> {
         self.consume(
             TokenType::LeftParen,
@@ -166,27 +249,27 @@ impl<'t> Parser<'t> {
 
     fn print_stmt(&mut self) -> Result<Stmt, ParserError> {
         let value = self.expression()?;
-        let _ = self.consume(
+        self.consume(
             TokenType::Semicolon,
             ParserError::UnexpectedToken {
                 expected: TokenType::Semicolon,
                 got: self.peek().ty.clone(),
                 pos: self.peek().pos,
             },
-        );
+        )?;
         Ok(Stmt::Print(value))
     }
 
     fn expr_stmt(&mut self) -> Result<Stmt, ParserError> {
         let value = self.expression()?;
-        let _ = self.consume(
+        self.consume(
             TokenType::Semicolon,
             ParserError::UnexpectedToken {
                 expected: TokenType::Semicolon,
                 got: self.peek().ty.clone(),
                 pos: self.peek().pos,
             },
-        );
+        )?;
         Ok(Stmt::Expression(value))
     }
 
@@ -195,7 +278,6 @@ impl<'t> Parser<'t> {
     }
 
     fn assignment(&mut self) -> Result<Expr, ParserError> {
-
         let expr = self.or()?;
 
         if self.match_token(&[TokenType::Eq]) {
@@ -219,17 +301,25 @@ impl<'t> Parser<'t> {
         while self.match_token(&[TokenType::Or]) {
             let op = Op::from(&self.tokens[self.cursor - 1].ty);
             let right = self.and()?;
-            left = Expr::Logical { left: Box::new(left), op, right: Box::new(right) }
+            left = Expr::Logical {
+                left: Box::new(left),
+                op,
+                right: Box::new(right),
+            }
         }
         Ok(left)
-    } 
+    }
 
     fn and(&mut self) -> Result<Expr, ParserError> {
         let mut left = self.equality()?;
         while self.match_token(&[TokenType::And]) {
             let op = Op::from(&self.tokens[self.cursor - 1].ty);
             let right = self.equality()?;
-            left = Expr::Logical { left: Box::new(left), op, right: Box::new(right) }
+            left = Expr::Logical {
+                left: Box::new(left),
+                op,
+                right: Box::new(right),
+            }
         }
         Ok(left)
     }
@@ -426,17 +516,17 @@ mod test {
     #[test]
     fn ast_expressions() {
         let cases = vec![
-            ("5 + 3 * 2", "(5 + (3 * 2))"),
-            ("10 / 2 - 1", "((10 / 2) - 1)"),
-            ("(5 + 3) * 2", "((group (5 + 3)) * 2)"),
-            ("!true", "(! true)"),
-            ("-5 + 3", "((- 5) + 3)"),
-            ("1 == 1", "(1 == 1)"),
-            ("5 != 3", "(5 != 3)"),
-            ("5 > 3", "(5 > 3)"),
-            ("\"hello\" == \"hello\"", "(hello == hello)"),
-            ("true == false", "(true == false)"),
-            ("nil", "nil"),
+            ("5 + 3 * 2;", "(5 + (3 * 2))"),
+            ("10 / 2 - 1;", "((10 / 2) - 1)"),
+            ("(5 + 3) * 2;", "((group (5 + 3)) * 2)"),
+            ("!true;", "(! true)"),
+            ("-5 + 3;", "((- 5) + 3)"),
+            ("1 == 1;", "(1 == 1)"),
+            ("5 != 3;", "(5 != 3)"),
+            ("5 > 3;", "(5 > 3)"),
+            ("\"hello\" == \"hello\";", "(hello == hello)"),
+            ("true == false;", "(true == false)"),
+            ("nil;", "nil"),
         ];
 
         for (case, exp) in cases {
