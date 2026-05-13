@@ -1,4 +1,3 @@
-
 use crate::{
     environment::Environment,
     errors::RuntimeError,
@@ -549,36 +548,39 @@ mod test {
         }
     }
 
-   #[test]
-   fn for_loops() {
-       let cases = vec![
-           // basic counting
-           ("for (var i = 0; i < 3; i = i + 1) print i;" ,  "0\n1\n2\n"),
+    #[test]
+    fn for_loops() {
+        let cases = vec![
+            // basic counting
+            ("for (var i = 0; i < 3; i = i + 1) print i;", "0\n1\n2\n"),
+            // accumulator
+            (
+                "var sum = 0; for (var i = 1; i <= 3; i = i + 1) { sum = sum + i; } print sum;",
+                "6\n",
+            ),
+            // no initializer
+            ("var i = 0; for (; i < 3; i = i + 1) print i;", "0\n1\n2\n"),
+            // no increment
+            (
+                "for (var i = 0; i < 3;) { print i; i = i + 1; }",
+                "0\n1\n2\n",
+            ),
+        ];
+        for (case, exp) in cases {
+            let mut scanner = Scanner::new(case.as_bytes());
+            let _ = scanner.parse().unwrap();
+            let mut parser = Parser::new(&scanner.tokens);
+            let stmts = parser.parse().unwrap();
+            let mut out = Vec::new();
+            let mut interpreter = Interpreter::new(&mut out);
+            assert!(interpreter.interpret(&stmts).is_ok());
+            assert_eq!(str::from_utf8(&out).unwrap(), exp);
+        }
+    }
 
-           // accumulator
-           ("var sum = 0; for (var i = 1; i <= 3; i = i + 1) { sum = sum + i; } print sum;",  "6\n"),
-
-           // no initializer
-           ("var i = 0; for (; i < 3; i = i + 1) print i;",  "0\n1\n2\n"),
-
-           // no increment
-           ("for (var i = 0; i < 3;) { print i; i = i + 1; }",  "0\n1\n2\n")
-       ];
-       for (case, exp) in cases {
-           let mut scanner = Scanner::new(case.as_bytes());
-           let _ = scanner.parse().unwrap();
-           let mut parser = Parser::new(&scanner.tokens);
-           let stmts = parser.parse().unwrap();
-           let mut out = Vec::new();
-           let mut interpreter = Interpreter::new(&mut out);
-           assert!(interpreter.interpret(&stmts).is_ok());
-           assert_eq!(str::from_utf8(&out).unwrap(), exp);
-       }
-   }
-
-   #[test]
-   fn fibonacci_for_loop() {
-       let code = r#"
+    #[test]
+    fn fibonacci_for_loop() {
+        let code = r#"
        var a = 0;
        var temp;
 
@@ -589,14 +591,14 @@ mod test {
 
        }
            "#;
-       let expect = "0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n55\n89\n144\n233\n377\n610\n987\n1597\n2584\n4181\n6765\n";
-           let mut scanner = Scanner::new(code.as_bytes());
-           let _ = scanner.parse().unwrap();
-           let mut parser = Parser::new(&scanner.tokens);
-           let stmts = parser.parse().unwrap();
-           let mut out = Vec::new();
-           let mut interpreter = Interpreter::new(&mut out);
-           assert!(interpreter.interpret(&stmts).is_ok());
-           assert_eq!(str::from_utf8(&out).unwrap(), expect);
-   }
+        let expect = "0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n55\n89\n144\n233\n377\n610\n987\n1597\n2584\n4181\n6765\n";
+        let mut scanner = Scanner::new(code.as_bytes());
+        let _ = scanner.parse().unwrap();
+        let mut parser = Parser::new(&scanner.tokens);
+        let stmts = parser.parse().unwrap();
+        let mut out = Vec::new();
+        let mut interpreter = Interpreter::new(&mut out);
+        assert!(interpreter.interpret(&stmts).is_ok());
+        assert_eq!(str::from_utf8(&out).unwrap(), expect);
+    }
 }

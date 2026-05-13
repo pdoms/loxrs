@@ -154,20 +154,39 @@ impl<'t> Parser<'t> {
         } else {
             None
         };
-        self.consume(TokenType::Semicolon, ParserError::UnexpectedToken { expected: TokenType::Semicolon, got: self.peek().ty.clone(), pos: self.peek().pos })?;
+        self.consume(
+            TokenType::Semicolon,
+            ParserError::UnexpectedToken {
+                expected: TokenType::Semicolon,
+                got: self.peek().ty.clone(),
+                pos: self.peek().pos,
+            },
+        )?;
 
         let increment = if !self.check(&TokenType::RightParen) {
             Some(self.expression()?)
-        } else {None};
-        self.consume(TokenType::RightParen, ParserError::UnexpectedToken { expected: TokenType::RightParen, got: self.peek().ty.clone(), pos: self.peek().pos })?;
+        } else {
+            None
+        };
+        self.consume(
+            TokenType::RightParen,
+            ParserError::UnexpectedToken {
+                expected: TokenType::RightParen,
+                got: self.peek().ty.clone(),
+                pos: self.peek().pos,
+            },
+        )?;
 
         let mut body = self.statement()?;
 
         if let Some(inc) = increment {
-            body = Stmt::Block(vec![body, Stmt::Expression(inc)]) 
+            body = Stmt::Block(vec![body, Stmt::Expression(inc)])
         }
 
-        body = Stmt::While { condition: condition.unwrap_or(Expr::Literal(Lit::Bool(true))), body: Box::new(body) };
+        body = Stmt::While {
+            condition: condition.unwrap_or(Expr::Literal(Lit::Bool(true))),
+            body: Box::new(body),
+        };
 
         if let Some(init) = initializer {
             body = Stmt::Block(vec![init, body])
