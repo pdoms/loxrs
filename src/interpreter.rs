@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::{
     environment::Environment,
     errors::RuntimeError,
@@ -16,17 +18,17 @@ fn is_truthy(lit: &Lit) -> bool {
 /// We use `W` (output) to test print statements.
 pub struct Interpreter<W: std::io::Write> {
     output: W,
-    environments: Vec<Environment>, // we handle scope like a stack
+    environments: Rc<Environment>, 
 }
 
 impl<W: std::io::Write> Interpreter<W> {
     pub fn new(output: W) -> Self {
-        let mut interpreter = Self {
+        let interpreter = Self {
             output,
-            environments: vec![Environment::new()],
+            environments: Rc::new(Environment::new()),
         };
         for (name, func) in native_functions() {
-            interpreter.define(&name, func);
+            interpreter.environments.define(&name, func);
         }
         interpreter
     }
@@ -97,13 +99,10 @@ impl<W: std::io::Write> Interpreter<W> {
                     }),
                 }
             }
-            Expr::Variable(name) => self.get_var(name).cloned(),
+            Expr::Variable(name) => self.get_var(name),
             Expr::Assign { name, value } => {
                 let value = self.eval(value)?;
                 self.set(name, value)
-                    .ok_or(RuntimeError::UndefinedVariable {
-                        var_name: name.to_owned(),
-                    })
             }
             Expr::Call {
                 callee,
@@ -133,39 +132,27 @@ impl<W: std::io::Write> Interpreter<W> {
     }
 
     fn enter_scope(&mut self) {
-        self.environments.push(Environment::new());
+        let new_env = Rc::new(Environment::new_enclosed(self.environments.clone()));
+        self.environments = new_env;
     }
 
     fn exit_scope(&mut self) {
-        self.environments.pop();
+        let parent = self.environments.parent.clone().expect("no parent scope");
+        self.environments = parent;
     }
 
-    fn get_var(&self, name: &String) -> Result<&Lit, RuntimeError> {
-        // inner most is last, so we iter reversed
-        for env in self.environments.iter().rev() {
-            if let Ok(val) = env.get(name) {
-                return Ok(val);
-            }
-        }
-        Err(RuntimeError::UndefinedVariable {
-            var_name: name.to_owned(),
-        })
+    fn get_var(&self, name: &str) -> Result<Lit, RuntimeError> {
+        self.environments.get(name)
     }
 
     /// is used for x = 5, after var has been already defined
-    fn set(&mut self, name: &String, value: Lit) -> Option<Lit> {
-        for env in self.environments.iter_mut().rev() {
-            if env.contains_key(name) {
-                env.insert(name, value.clone());
-                return Some(value);
-            }
-        }
-        None
+    fn set(&mut self, name: &str, value: Lit) -> Result<Lit, RuntimeError> {
+        self.environments.set(name, value)
     }
 
     /// is used at var x = 5
     fn define(&mut self, name: &str, value: Lit) {
-        self.environments.last_mut().unwrap().insert(name, value);
+        self.environments.define(name, value);
     }
 
     pub fn execute(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
@@ -217,6 +204,7 @@ impl<W: std::io::Write> Interpreter<W> {
                     name: name.clone(),
                     params: params.clone(),
                     body: body.clone(),
+                    closure: self.environments.clone(), // capture environment
                 };
                 self.define(name, Lit::Function(func));
                 Ok(())
@@ -242,13 +230,15 @@ impl<W: std::io::Write> Interpreter<W> {
             });
         }
 
-        self.enter_scope();
+        let saved = self.environments.clone();
+        self.environments = Rc::new(Environment::new_enclosed(func.closure.clone()));
         for (param, arg) in func.params.iter().zip(args) {
-            self.define(param, arg);
+            self.environments.define(param, arg);
         }
 
         let result = self.execute_block(&func.body);
-        self.exit_scope();
+
+        self.environments = saved;
         match result {
             Ok(()) => Ok(Lit::Nil),
             Err(RuntimeError::Unwind(Unwind::Return(val))) => Ok(val),
@@ -692,12 +682,12 @@ mod test {
                 "fun fib(n) { if (n <= 1) { return n; } return fib(n - 1) + fib(n - 2); } print fib(7);",
                 "13\n",
             ),
-            (
+           (
                 "fun fact(n) { if (n <= 1) { return 1; } return n * fact(n - 1); } print fact(5);",
                 "120\n",
             ),
             ("print clock() > 0;", "true\n"),
-            (
+           (
                 "var t1 = clock(); var t2 = clock(); print t2 >= t1;",
                 "true\n",
             ),
@@ -710,7 +700,7 @@ mod test {
             let mut out = Vec::new();
             let mut interpreter = Interpreter::new(&mut out);
             assert!(interpreter.interpret(&stmts).is_ok());
-            assert_eq!(str::from_utf8(&out).unwrap(), exp);
+            assert_eq!(str::from_utf8(&out).unwrap(), exp, "{case}");
         }
 
         //errors
@@ -737,7 +727,35 @@ mod test {
             let stmts = parser.parse().unwrap();
             let mut out = Vec::new();
             let mut interpreter = Interpreter::new(&mut out);
-            assert_eq!(interpreter.interpret(&stmts), err);
+            assert_eq!(interpreter.interpret(&stmts), err, "{case}");
         }
     }
+
+    #[test]
+    fn closures() {
+        let cases = vec![
+            // basic closure
+            ("fun makeCounter() { var count = 0; fun increment() { count = count + 1; return count; } return increment; } var counter = makeCounter(); print counter(); print counter();",
+            "1\n2\n"),
+
+            // closure captures value at definition time
+            ("var x = 1; fun f() { return x; } x = 2; print f();",
+            "2\n"), // sees the updated x since it captures the environment by reference
+
+            // each closure is independent
+            ("fun makeCounter() { var count = 0; fun increment() { count = count + 1; return count; } return increment; } var c1 = makeCounter(); var c2 = makeCounter(); print c1(); print c1(); print c2();",
+            "1\n2\n1\n")
+        ];
+        for (case, exp) in cases {
+            let mut scanner = Scanner::new(case.as_bytes());
+            let _ = scanner.parse().unwrap();
+            let mut parser = Parser::new(&scanner.tokens);
+            let stmts = parser.parse().unwrap();
+            let mut out = Vec::new();
+            let mut interpreter = Interpreter::new(&mut out);
+            assert!(interpreter.interpret(&stmts).is_ok());
+            assert_eq!(str::from_utf8(&out).unwrap(), exp, "case: {case}");
+        }
+    }
+
 }

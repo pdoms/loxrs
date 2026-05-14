@@ -1,8 +1,7 @@
-use std::fmt::Display;
+use std::{fmt::Display, rc::Rc};
 
 use crate::{
-    errors::{NUMERIC_OPERANDS_NEEDED_ERR, RuntimeError},
-    token::{Token, TokenType},
+    environment::Environment, errors::{RuntimeError, NUMERIC_OPERANDS_NEEDED_ERR}, token::{Token, TokenType}
 };
 
 #[derive(Debug, Clone)]
@@ -289,6 +288,7 @@ pub struct LoxFunction {
     pub name: String,
     pub params: Vec<String>,
     pub body: Vec<Stmt>,
+    pub closure: Rc<Environment>,
 }
 
 #[derive(Clone, Debug)]

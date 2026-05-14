@@ -1,32 +1,52 @@
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{errors::RuntimeError, nodes::Lit};
 
+#[derive(Clone, Debug)]
 pub struct Environment {
-    vars: HashMap<String, Lit>,
+    pub values: Rc<RefCell<HashMap<String, Lit>>>,
+    pub parent: Option<Rc<Environment>>
 }
 
 impl Environment {
     pub fn new() -> Self {
         Self {
-            vars: HashMap::new(),
+            values: Rc::new(RefCell::new(HashMap::new())),
+            parent: None
         }
     }
 
-    pub fn insert(&mut self, k: &str, v: Lit) {
-        self.vars.insert(k.to_owned(), v);
-    }
-
-    pub fn get(&self, k: &String) -> Result<&Lit, RuntimeError> {
-        match self.vars.get(k) {
-            Some(v) => Ok(v),
-            None => Err(RuntimeError::UndefinedVariable {
-                var_name: k.to_owned(),
-            }),
+    pub fn new_enclosed(parent: Rc<Environment>) -> Self {
+        Self {
+            values: Rc::new(RefCell::new(HashMap::new())),
+            parent: Some(parent)
         }
     }
 
-    pub fn contains_key(&self, key: &String) -> bool {
-        self.vars.contains_key(key)
+    pub fn define(&self, name: &str, value: Lit) {
+        self.values.borrow_mut().insert(name.to_string(), value);
     }
+
+    pub fn get(&self, name: &str) -> Result<Lit, RuntimeError> {
+        if let Some(val) = self.values.borrow().get(name) {
+            return Ok(val.clone())
+        }
+        match &self.parent {
+            Some(parent) => parent.get(name),
+            None => Err(RuntimeError::UndefinedVariable { var_name: name.to_string() })
+        }
+    }
+
+    pub fn set(&self, name: &str, value: Lit) -> Result<Lit, RuntimeError> {
+        if self.values.borrow().contains_key(name) {
+            self.values.borrow_mut().insert(name.to_string(), value.clone());
+            return Ok(value);
+        }
+        match &self.parent {
+            Some(parent) => parent.set(name, value),
+            None => Err(RuntimeError::UndefinedVariable { var_name: name.to_string()})
+            
+        }
+    }
+
 }
