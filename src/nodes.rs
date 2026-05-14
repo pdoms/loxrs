@@ -2,9 +2,10 @@ use std::fmt::Display;
 
 use crate::{
     errors::{NUMERIC_OPERANDS_NEEDED_ERR, RuntimeError},
-    token::TokenType,
+    token::{Token, TokenType},
 };
 
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Print(Expr),
     Var {
@@ -21,9 +22,18 @@ pub enum Stmt {
         then_branch: Box<Stmt>,
         else_branch: Option<Box<Stmt>>,
     },
+    Function {
+        name: String,
+        params: Vec<String>,
+        body: Vec<Stmt>,
+    },
+    Return {
+        value: Option<Expr>,
+    },
     Expression(Expr),
 }
 
+#[derive(Debug, Clone)]
 pub enum Expr {
     Literal(Lit),
     Logical {
@@ -39,6 +49,11 @@ pub enum Expr {
         op: Op,
         right: Box<Expr>,
         left: Box<Expr>,
+    },
+    Call {
+        callee: Box<Expr>,
+        paren: Token,
+        arguments: Vec<Expr>,
     },
     Grouping(Box<Expr>),
     Variable(String),
@@ -58,16 +73,32 @@ impl Display for Expr {
             Expr::Grouping(expr) => write!(f, "(group {})", expr),
             Expr::Variable(name) => write!(f, "<{}>", name),
             Expr::Assign { name, value } => write!(f, "<{}> = {}", name, value),
+            Expr::Call {
+                callee,
+                paren: _,
+                arguments,
+            } => write!(
+                f,
+                "{}({})",
+                callee,
+                arguments
+                    .iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Lit {
     Number(f64),
     String(String),
     Bool(bool),
     Nil,
+    Function(LoxFunction),
+    NativeFunction(NativeFunction),
 }
 
 impl PartialEq for Lit {
@@ -88,6 +119,8 @@ impl Display for Lit {
             Lit::String(s) => write!(f, "{s}"),
             Lit::Bool(b) => write!(f, "{b}"),
             Lit::Nil => write!(f, "nil"),
+            Lit::Function(fun) => write!(f, "<fn {}>", fun.name),
+            Lit::NativeFunction(fun) => write!(f, "<fn {}>", fun.name),
         }
     }
 }
@@ -180,6 +213,7 @@ impl Lit {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum Op {
     Equal,
     NotEqual,
@@ -201,7 +235,7 @@ impl Display for Op {
         match self {
             Op::Equal => f.write_str("=="),
             Op::NotEqual => f.write_str("!="),
-            Op::LessThan => f.write_str("="),
+            Op::LessThan => f.write_str("<"),
             Op::LessThanEqual => f.write_str("<="),
             Op::GreaterThan => f.write_str(">"),
             Op::GreaterThanEqual => f.write_str(">="),
@@ -235,4 +269,31 @@ impl From<&TokenType> for Op {
             _ => unimplemented!("attempted to convert {:?} to operator", tok_ty),
         }
     }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Unwind {
+    Return(Lit),
+}
+
+impl Display for Unwind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Unwind::Return(lit) => write!(f, "{lit}"),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct LoxFunction {
+    pub name: String,
+    pub params: Vec<String>,
+    pub body: Vec<Stmt>,
+}
+
+#[derive(Clone, Debug)]
+pub struct NativeFunction {
+    pub name: &'static str,
+    pub arity: usize,
+    pub func: fn(&Vec<Lit>) -> Result<Lit, RuntimeError>,
 }

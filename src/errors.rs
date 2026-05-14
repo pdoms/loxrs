@@ -1,6 +1,9 @@
 use std::{error::Error, fmt::Display};
 
-use crate::token::{Token, TokenType};
+use crate::{
+    nodes::Unwind,
+    token::{Token, TokenType},
+};
 
 pub const NUMERIC_OPERANDS_NEEDED_ERR: &str = "operands must be numeric types";
 
@@ -42,6 +45,9 @@ pub enum ParserError {
     InvalidAssignmentTarget {
         pos: (usize, usize),
     },
+    TooManyArguments {
+        pos: (usize, usize),
+    },
 }
 impl Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -59,6 +65,13 @@ impl Display for ParserError {
             ParserError::InvalidAssignmentTarget { pos } => {
                 write!(f, "{}:{} invalid assigment target", pos.0, pos.1)
             }
+            ParserError::TooManyArguments { pos } => {
+                write!(
+                    f,
+                    "{}:{} this implementation only allows a maximum of 255 arguments to a function",
+                    pos.0, pos.1
+                )
+            }
         }
     }
 }
@@ -70,6 +83,9 @@ pub enum RuntimeError {
     InvalidOperator { msg: String },
     DivisionByZero,
     UndefinedVariable { var_name: String },
+    Unwind(Unwind),
+    ArityMismatch { expected: usize, got: usize },
+    NotCallable((usize, usize)),
 }
 impl Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -80,6 +96,17 @@ impl Display for RuntimeError {
             RuntimeError::UndefinedVariable { var_name } => {
                 write!(f, "UndefinedVariable: '{var_name}'")
             }
+            RuntimeError::Unwind(unwind) => {
+                write!(f, "Unwind: '{unwind}'")
+            }
+            RuntimeError::ArityMismatch { expected, got } => {
+                write!(f, "ArityMismatch - expectd: {expected}; got {got}")
+            }
+            RuntimeError::NotCallable(pos) => write!(
+                f,
+                "NotCallable: entity is not callable at ({}):({})",
+                pos.0, pos.1
+            ),
         }
     }
 }

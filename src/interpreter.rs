@@ -1,7 +1,8 @@
 use crate::{
     environment::Environment,
     errors::RuntimeError,
-    nodes::{Expr, Lit, Op, Stmt},
+    native::native_functions,
+    nodes::{Expr, Lit, LoxFunction, Op, Stmt, Unwind},
 };
 
 fn is_truthy(lit: &Lit) -> bool {
@@ -20,10 +21,14 @@ pub struct Interpreter<W: std::io::Write> {
 
 impl<W: std::io::Write> Interpreter<W> {
     pub fn new(output: W) -> Self {
-        Self {
+        let mut interpreter = Self {
             output,
             environments: vec![Environment::new()],
+        };
+        for (name, func) in native_functions() {
+            interpreter.define(&name, func);
         }
+        interpreter
     }
 
     pub fn interpret(&mut self, stmts: &[Stmt]) -> Result<(), RuntimeError> {
@@ -99,6 +104,30 @@ impl<W: std::io::Write> Interpreter<W> {
                     .ok_or(RuntimeError::UndefinedVariable {
                         var_name: name.to_owned(),
                     })
+            }
+            Expr::Call {
+                callee,
+                paren,
+                arguments,
+            } => {
+                let callee = self.eval(callee)?;
+                let args = arguments
+                    .iter()
+                    .map(|a| self.eval(a))
+                    .collect::<Result<Vec<_>, _>>()?;
+                match callee {
+                    Lit::Function(func) => self.call_function(func, args),
+                    Lit::NativeFunction(func) => {
+                        if args.len() != func.arity {
+                            return Err(RuntimeError::ArityMismatch {
+                                expected: func.arity,
+                                got: args.len(),
+                            });
+                        }
+                        (func.func)(&args)
+                    }
+                    _ => Err(RuntimeError::NotCallable(paren.pos)),
+                }
             }
         }
     }
@@ -183,6 +212,47 @@ impl<W: std::io::Write> Interpreter<W> {
                 }
                 Ok(())
             }
+            Stmt::Function { name, params, body } => {
+                let func = LoxFunction {
+                    name: name.clone(),
+                    params: params.clone(),
+                    body: body.clone(),
+                };
+                self.define(name, Lit::Function(func));
+                Ok(())
+            }
+            Stmt::Return { value } => {
+                let val = match value {
+                    Some(expr) => self.eval(expr)?,
+                    None => Lit::Nil,
+                };
+                Err(RuntimeError::Unwind(Unwind::Return(val)))
+            }
+        }
+    }
+    fn execute_block(&mut self, stmts: &[Stmt]) -> Result<(), RuntimeError> {
+        stmts.iter().try_for_each(|stmt| self.execute(stmt))
+    }
+
+    fn call_function(&mut self, func: LoxFunction, args: Vec<Lit>) -> Result<Lit, RuntimeError> {
+        if args.len() != func.params.len() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: func.params.len(),
+                got: args.len(),
+            });
+        }
+
+        self.enter_scope();
+        for (param, arg) in func.params.iter().zip(args) {
+            self.define(param, arg);
+        }
+
+        let result = self.execute_block(&func.body);
+        self.exit_scope();
+        match result {
+            Ok(()) => Ok(Lit::Nil),
+            Err(RuntimeError::Unwind(Unwind::Return(val))) => Ok(val),
+            Err(e) => Err(e),
         }
     }
 }
@@ -600,5 +670,74 @@ mod test {
         let mut interpreter = Interpreter::new(&mut out);
         assert!(interpreter.interpret(&stmts).is_ok());
         assert_eq!(str::from_utf8(&out).unwrap(), expect);
+    }
+
+    #[test]
+    fn funcs() {
+        let cases = vec![
+            ("fun greet() { print \"hello\"; } greet();", "hello\n"),
+            ("fun add(a, b) { return a + b; } print add(1, 2);", "3\n"),
+            ("fun square(x) { return x * x; } print square(4);", "16\n"),
+            ("fun nothing() {} print nothing();", "nil\n"),
+            (
+                "fun sign(x) { if (x > 0) { return 1; } if (x < 0) { return -1; } return 0; } print sign(5); print sign(-3); print sign(0);",
+                "1\n-1\n0\n",
+            ),
+            (
+                "var x = 1; fun f() { var x = 2; return x; } print f(); print x;",
+                "2\n1\n",
+            ),
+            ("var x = 10; fun f() { return x; } print f();", "10\n"),
+            (
+                "fun fib(n) { if (n <= 1) { return n; } return fib(n - 1) + fib(n - 2); } print fib(7);",
+                "13\n",
+            ),
+            (
+                "fun fact(n) { if (n <= 1) { return 1; } return n * fact(n - 1); } print fact(5);",
+                "120\n",
+            ),
+            ("print clock() > 0;", "true\n"),
+            (
+                "var t1 = clock(); var t2 = clock(); print t2 >= t1;",
+                "true\n",
+            ),
+        ];
+        for (case, exp) in cases {
+            let mut scanner = Scanner::new(case.as_bytes());
+            let _ = scanner.parse().unwrap();
+            let mut parser = Parser::new(&scanner.tokens);
+            let stmts = parser.parse().unwrap();
+            let mut out = Vec::new();
+            let mut interpreter = Interpreter::new(&mut out);
+            assert!(interpreter.interpret(&stmts).is_ok());
+            assert_eq!(str::from_utf8(&out).unwrap(), exp);
+        }
+
+        //errors
+        let cases = vec![
+            (
+                "fun f(a) {} f();",
+                Err(RuntimeError::ArityMismatch {
+                    expected: 1,
+                    got: 0,
+                }),
+            ),
+            (
+                "fun f() {} f(1);",
+                Err(RuntimeError::ArityMismatch {
+                    expected: 0,
+                    got: 1,
+                }),
+            ),
+        ];
+        for (case, err) in cases {
+            let mut scanner = Scanner::new(case.as_bytes());
+            let _ = scanner.parse().unwrap();
+            let mut parser = Parser::new(&scanner.tokens);
+            let stmts = parser.parse().unwrap();
+            let mut out = Vec::new();
+            let mut interpreter = Interpreter::new(&mut out);
+            assert_eq!(interpreter.interpret(&stmts), err);
+        }
     }
 }

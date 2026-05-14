@@ -2,6 +2,7 @@ mod driver;
 mod environment;
 mod errors;
 mod interpreter;
+mod native;
 mod nodes;
 mod parser;
 mod scanner;

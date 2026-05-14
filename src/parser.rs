@@ -2,15 +2,19 @@
 //!
 //! ==========================================================================
 //! program         -> declaration* EOF ;
-//! declaration     -> varDecl
+//! declaration     -> funDecl
+//!                 | varDecl
 //!                 | statement ;
+//! funDecl         -> "fun" IDENTIFIER "(" params? ")" block ;
+//! params          -> IDENTIFIER ("," IDENTIFIER)* ;
 //! varDecl         -> "var" IDENTIFIER ("=" expression)? ";" ;
 //! statement       -> exprStmt
 //!                 | forStmt
 //!                 | ifStmt
 //!                 | printStmt
 //!                 | whileStmt
-//!                 | block ;
+//!                 | block
+//!                 | returnStmt ;
 //! exprStmt        -> expression ";"
 //! forStmt         -> "for" "(" (varDecl | exprStmt | ";" )
 //!                     expression? ";"
@@ -20,6 +24,7 @@
 //! printStmt       -> "print" expression ";" ;
 //! whileStmt       -> "while" "(" expression ")" statement ;
 //! block           -> "{" declaration* "}" ;
+//! returnStmt      -> "return" expression? ";" ;
 //! expression      -> assignment ;
 //! assignment      -> IDENTIFIER "=" assignment
 //!                 | logic_or ;
@@ -30,16 +35,21 @@
 //! term            -> factor ( ( "-" | "+" ) factor )* ;
 //! factor          -> unary ( ( "/" | "*" ) unary )* ;
 //! unary           -> ( "!" | "-" ) unary
-//!                 | primary ;
+//!                 | call ;
+//! call            -> primary ( "(" aruments? ")" ) ;
+//! arguments       -> expression ( "," expression )* ;
 //! primary         -> NUMBER | STRING | "true" | "false" | "nil"
 //!                 | "(" expression ")" | IDENTIFIER ;
 //! ==========================================================================
 //!
+
 use crate::{
     errors::ParserError,
     nodes::{Expr, Lit, Op, Stmt},
     token::{Token, TokenType},
 };
+
+const MAX_ARGS: usize = 255;
 
 pub struct Parser<'t> {
     tokens: &'t [Token],
@@ -71,10 +81,65 @@ impl<'t> Parser<'t> {
     }
 
     fn declaration(&mut self) -> Result<Stmt, ParserError> {
+        if self.match_token(&[TokenType::Fun]) {
+            return self.fun_declaration();
+        }
+
         if self.match_token(&[TokenType::Var]) {
             return self.var_declaration();
         }
         self.statement()
+    }
+
+    fn fun_declaration(&mut self) -> Result<Stmt, ParserError> {
+        let name = match &self.peek().ty {
+            TokenType::Identifier(n) => n.clone(),
+            _ => {
+                return Err(ParserError::UnexpectedToken {
+                    expected: TokenType::Identifier(String::new()),
+                    got: self.peek().ty.clone(),
+                    pos: self.peek().pos,
+                });
+            }
+        };
+        self.advance();
+
+        self.consume_and_unexpected(TokenType::LeftParen)?;
+
+        let mut params = vec![];
+
+        if !self.check(&TokenType::RightParen) {
+            loop {
+                if params.len() >= MAX_ARGS {
+                    return Err(ParserError::TooManyArguments {
+                        pos: self.peek().pos,
+                    });
+                }
+                match &self.peek().ty {
+                    TokenType::Identifier(s) => params.push(s.clone()),
+                    _ => {
+                        return Err(ParserError::UnexpectedToken {
+                            expected: TokenType::Identifier(String::new()),
+                            got: self.peek().ty.clone(),
+                            pos: self.peek().pos,
+                        });
+                    }
+                }
+                self.advance();
+                if !self.match_token(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        self.consume_and_unexpected(TokenType::RightParen)?;
+        self.consume_and_unexpected(TokenType::LeftCurly)?;
+        let body = match self.block()? {
+            Stmt::Block(stmts) => stmts,
+            _ => unreachable!(),
+        };
+
+        Ok(Stmt::Function { name, params, body })
     }
 
     fn var_declaration(&mut self) -> Result<Stmt, ParserError> {
@@ -96,19 +161,15 @@ impl<'t> Parser<'t> {
         } else {
             None
         };
-        self.consume(
-            TokenType::Semicolon,
-            ParserError::UnexpectedToken {
-                expected: TokenType::Semicolon,
-                got: self.peek().ty.clone(),
-                pos: self.peek().pos,
-            },
-        )?;
+        self.consume_and_unexpected(TokenType::Semicolon)?;
 
         Ok(Stmt::Var { name, initializer })
     }
 
     fn statement(&mut self) -> Result<Stmt, ParserError> {
+        if self.match_token(&[TokenType::Return]) {
+            return self.return_statement();
+        }
         if self.match_token(&[TokenType::Print]) {
             return self.print_stmt();
         }
@@ -131,15 +192,18 @@ impl<'t> Parser<'t> {
         self.expr_stmt()
     }
 
+    fn return_statement(&mut self) -> Result<Stmt, ParserError> {
+        let value = if !self.check(&TokenType::Semicolon) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+        self.consume_and_unexpected(TokenType::Semicolon)?;
+        Ok(Stmt::Return { value })
+    }
+
     fn for_statement(&mut self) -> Result<Stmt, ParserError> {
-        self.consume(
-            TokenType::LeftParen,
-            ParserError::UnexpectedToken {
-                expected: TokenType::LeftParen,
-                got: self.peek().ty.clone(),
-                pos: self.peek().pos,
-            },
-        )?;
+        self.consume_and_unexpected(TokenType::LeftParen)?;
 
         let initializer = if self.match_token(&[TokenType::Semicolon]) {
             None
@@ -154,28 +218,14 @@ impl<'t> Parser<'t> {
         } else {
             None
         };
-        self.consume(
-            TokenType::Semicolon,
-            ParserError::UnexpectedToken {
-                expected: TokenType::Semicolon,
-                got: self.peek().ty.clone(),
-                pos: self.peek().pos,
-            },
-        )?;
+        self.consume_and_unexpected(TokenType::Semicolon)?;
 
         let increment = if !self.check(&TokenType::RightParen) {
             Some(self.expression()?)
         } else {
             None
         };
-        self.consume(
-            TokenType::RightParen,
-            ParserError::UnexpectedToken {
-                expected: TokenType::RightParen,
-                got: self.peek().ty.clone(),
-                pos: self.peek().pos,
-            },
-        )?;
+        self.consume_and_unexpected(TokenType::RightParen)?;
 
         let mut body = self.statement()?;
 
@@ -196,23 +246,9 @@ impl<'t> Parser<'t> {
     }
 
     fn while_statement(&mut self) -> Result<Stmt, ParserError> {
-        self.consume(
-            TokenType::LeftParen,
-            ParserError::UnexpectedToken {
-                expected: TokenType::LeftParen,
-                got: self.peek().ty.clone(),
-                pos: self.peek().pos,
-            },
-        )?;
+        self.consume_and_unexpected(TokenType::LeftParen)?;
         let condition = self.expression()?;
-        self.consume(
-            TokenType::RightParen,
-            ParserError::UnexpectedToken {
-                expected: TokenType::RightParen,
-                got: self.peek().ty.clone(),
-                pos: self.peek().pos,
-            },
-        )?;
+        self.consume_and_unexpected(TokenType::RightParen)?;
         let body = self.statement()?;
         Ok(Stmt::While {
             condition,
@@ -220,23 +256,9 @@ impl<'t> Parser<'t> {
         })
     }
     fn if_statement(&mut self) -> Result<Stmt, ParserError> {
-        self.consume(
-            TokenType::LeftParen,
-            ParserError::UnexpectedToken {
-                expected: TokenType::LeftParen,
-                got: self.peek().ty.clone(),
-                pos: self.peek().pos,
-            },
-        )?;
+        self.consume_and_unexpected(TokenType::LeftParen)?;
         let condition = self.expression()?;
-        self.consume(
-            TokenType::RightParen,
-            ParserError::UnexpectedToken {
-                expected: TokenType::RightParen,
-                got: self.peek().ty.clone(),
-                pos: self.peek().pos,
-            },
-        )?;
+        self.consume_and_unexpected(TokenType::RightParen)?;
         let then_branch = Box::new(self.statement()?);
         let else_branch = if self.match_token(&[TokenType::Else]) {
             Some(Box::new(self.statement()?))
@@ -255,40 +277,19 @@ impl<'t> Parser<'t> {
         while !self.is_eof() && self.peek().ty != TokenType::RightCurly {
             stmts.push(self.declaration()?);
         }
-        self.consume(
-            TokenType::RightCurly,
-            ParserError::UnexpectedToken {
-                expected: TokenType::RightCurly,
-                got: self.peek().ty.clone(),
-                pos: self.peek().pos,
-            },
-        )?;
+        self.consume_and_unexpected(TokenType::RightCurly)?;
         Ok(Stmt::Block(stmts))
     }
 
     fn print_stmt(&mut self) -> Result<Stmt, ParserError> {
         let value = self.expression()?;
-        self.consume(
-            TokenType::Semicolon,
-            ParserError::UnexpectedToken {
-                expected: TokenType::Semicolon,
-                got: self.peek().ty.clone(),
-                pos: self.peek().pos,
-            },
-        )?;
+        self.consume_and_unexpected(TokenType::Semicolon)?;
         Ok(Stmt::Print(value))
     }
 
     fn expr_stmt(&mut self) -> Result<Stmt, ParserError> {
         let value = self.expression()?;
-        self.consume(
-            TokenType::Semicolon,
-            ParserError::UnexpectedToken {
-                expected: TokenType::Semicolon,
-                got: self.peek().ty.clone(),
-                pos: self.peek().pos,
-            },
-        )?;
+        self.consume_and_unexpected(TokenType::Semicolon)?;
         Ok(Stmt::Expression(value))
     }
 
@@ -413,8 +414,46 @@ impl<'t> Parser<'t> {
                 right: Box::new(right),
             });
         }
-        self.primary()
+        self.call()
     }
+
+    fn call(&mut self) -> Result<Expr, ParserError> {
+        let mut expr = self.primary()?;
+        loop {
+            if self.match_token(&[TokenType::LeftParen]) {
+                expr = self.finish_call(expr)?;
+            } else {
+                break Ok(expr);
+            }
+        }
+    }
+
+    fn finish_call(&mut self, callee: Expr) -> Result<Expr, ParserError> {
+        let mut arguments = vec![];
+        if !self.check(&TokenType::RightParen) {
+            loop {
+                if arguments.len() >= MAX_ARGS {
+                    return Err(ParserError::TooManyArguments {
+                        pos: self.peek().pos,
+                    });
+                }
+                arguments.push(self.expression()?);
+                if !self.match_token(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        let paren = self.peek().clone();
+        self.consume_and_unexpected(TokenType::RightParen)?;
+
+        Ok(Expr::Call {
+            callee: Box::new(callee),
+            paren,
+            arguments,
+        })
+    }
+
     fn primary(&mut self) -> Result<Expr, ParserError> {
         if self.match_token(&[TokenType::False]) {
             return Ok(Expr::Literal(Lit::Bool(false)));
@@ -439,14 +478,7 @@ impl<'t> Parser<'t> {
 
         if self.match_token(&[TokenType::LeftParen]) {
             let expr = self.expression()?;
-            self.consume(
-                TokenType::RightParen,
-                ParserError::UnexpectedToken {
-                    expected: TokenType::RightParen,
-                    got: self.tokens[self.cursor].ty.clone(),
-                    pos: self.tokens[self.cursor].pos,
-                },
-            )?;
+            self.consume_and_unexpected(TokenType::RightParen)?;
             return Ok(Expr::Grouping(Box::new(expr)));
         }
 
@@ -501,13 +533,26 @@ impl<'t> Parser<'t> {
         std::mem::discriminant(&self.peek().ty) == std::mem::discriminant(ty)
     }
 
-    fn consume(&mut self, ty: TokenType, err: ParserError) -> Result<(), ParserError> {
-        if self.check(&ty) {
+    //    fn consume(&mut self, ty: TokenType, err: ParserError) -> Result<(), ParserError> {
+    //        if self.check(&ty) {
+    //            self.advance();
+    //            return Ok(());
+    //        }
+    //
+    //        Err(err)
+    //    }
+
+    fn consume_and_unexpected(&mut self, expected: TokenType) -> Result<(), ParserError> {
+        if self.check(&expected) {
             self.advance();
             return Ok(());
         }
 
-        Err(err)
+        Err(ParserError::UnexpectedToken {
+            expected,
+            got: self.peek().ty.clone(),
+            pos: self.peek().pos,
+        })
     }
 
     fn synchronize(&mut self) {
