@@ -18,7 +18,7 @@ fn is_truthy(lit: &Lit) -> bool {
 /// We use `W` (output) to test print statements.
 pub struct Interpreter<W: std::io::Write> {
     output: W,
-    environments: Rc<Environment>, 
+    environments: Rc<Environment>,
 }
 
 impl<W: std::io::Write> Interpreter<W> {
@@ -682,12 +682,12 @@ mod test {
                 "fun fib(n) { if (n <= 1) { return n; } return fib(n - 1) + fib(n - 2); } print fib(7);",
                 "13\n",
             ),
-           (
+            (
                 "fun fact(n) { if (n <= 1) { return 1; } return n * fact(n - 1); } print fact(5);",
                 "120\n",
             ),
             ("print clock() > 0;", "true\n"),
-           (
+            (
                 "var t1 = clock(); var t2 = clock(); print t2 >= t1;",
                 "true\n",
             ),
@@ -735,16 +735,17 @@ mod test {
     fn closures() {
         let cases = vec![
             // basic closure
-            ("fun makeCounter() { var count = 0; fun increment() { count = count + 1; return count; } return increment; } var counter = makeCounter(); print counter(); print counter();",
-            "1\n2\n"),
-
+            (
+                "fun makeCounter() { var count = 0; fun increment() { count = count + 1; return count; } return increment; } var counter = makeCounter(); print counter(); print counter();",
+                "1\n2\n",
+            ),
             // closure captures value at definition time
-            ("var x = 1; fun f() { return x; } x = 2; print f();",
-            "2\n"), // sees the updated x since it captures the environment by reference
-
+            ("var x = 1; fun f() { return x; } x = 2; print f();", "2\n"), // sees the updated x since it captures the environment by reference
             // each closure is independent
-            ("fun makeCounter() { var count = 0; fun increment() { count = count + 1; return count; } return increment; } var c1 = makeCounter(); var c2 = makeCounter(); print c1(); print c1(); print c2();",
-            "1\n2\n1\n")
+            (
+                "fun makeCounter() { var count = 0; fun increment() { count = count + 1; return count; } return increment; } var c1 = makeCounter(); var c2 = makeCounter(); print c1(); print c1(); print c2();",
+                "1\n2\n1\n",
+            ),
         ];
         for (case, exp) in cases {
             let mut scanner = Scanner::new(case.as_bytes());
@@ -757,5 +758,4 @@ mod test {
             assert_eq!(str::from_utf8(&out).unwrap(), exp, "case: {case}");
         }
     }
-
 }

@@ -1,7 +1,9 @@
 use std::{fmt::Display, rc::Rc};
 
 use crate::{
-    environment::Environment, errors::{RuntimeError, NUMERIC_OPERANDS_NEEDED_ERR}, token::{Token, TokenType}
+    environment::Environment,
+    errors::{NUMERIC_OPERANDS_NEEDED_ERR, RuntimeError},
+    token::{Token, TokenType},
 };
 
 #[derive(Debug, Clone)]
