@@ -5,6 +5,7 @@ mod interpreter;
 mod native;
 mod nodes;
 mod parser;
+mod resolver;
 mod scanner;
 mod token;
 

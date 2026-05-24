@@ -1,6 +1,7 @@
 use std::io::stdout;
 use std::{io::Write, path::Path};
 
+use crate::resolver::Resolver;
 use crate::{interpreter::Interpreter, parser::Parser, scanner::Scanner};
 
 pub fn run(input_file: &str) -> Result<(), ()> {
@@ -36,9 +37,19 @@ pub fn run(input_file: &str) -> Result<(), ()> {
             vec![]
         }
     };
+
+    let mut resolver = Resolver::new();
+    for stmt in &stmts {
+        if let Err(err) = resolver.resolve_stmt(stmt) {
+            println!("[ERROR] {err}",);
+            return Err(());
+        }
+    }
+
     let mut stdout = stdout();
     println!("Parsed {} statements", stmts.len());
     let mut interpreter = Interpreter::new(&mut stdout);
+    interpreter.resolve(resolver.locals);
     println!("================ Program StdOut ================");
     match interpreter.interpret(&stmts) {
         Ok(_) => match stdout.flush() {

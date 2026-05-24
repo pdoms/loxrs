@@ -111,3 +111,22 @@ impl Display for RuntimeError {
     }
 }
 impl Error for RuntimeError {}
+
+#[derive(Debug, PartialEq)]
+pub enum ResolveError {
+    VariableInOwnInititalizer { name: String },
+    ReturnOutsideFunction,
+}
+
+impl Display for ResolveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            ResolveError::VariableInOwnInititalizer { name } => {
+                write!(f, "ResolverError: variable in onw inititalizer: {name}")
+            }
+            Self::ReturnOutsideFunction => write!(f, "ResolverError: return outside function"),
+        }
+    }
+}
+
+impl Error for ResolveError {}

@@ -53,4 +53,39 @@ impl Environment {
             }),
         }
     }
+    pub fn get_at(&self, name: &str, depth: usize) -> Result<Lit, RuntimeError> {
+        if depth == 0 {
+            return self.values.borrow().get(name).cloned().ok_or(
+                RuntimeError::UndefinedVariable {
+                    var_name: name.to_string(),
+                },
+            );
+        }
+        match &self.parent {
+            Some(parent) => parent.get_at(name, depth - 1),
+            None => Err(RuntimeError::UndefinedVariable {
+                var_name: name.to_string(),
+            }),
+        }
+    }
+
+    pub fn set_at(&self, name: &str, value: Lit, depth: usize) -> Result<Lit, RuntimeError> {
+        if depth == 0 {
+            if self.values.borrow().contains_key(name) {
+                self.values
+                    .borrow_mut()
+                    .insert(name.to_string(), value.clone());
+                return Ok(value);
+            }
+            return Err(RuntimeError::UndefinedVariable {
+                var_name: name.to_string(),
+            });
+        }
+        match &self.parent {
+            Some(parent) => parent.set_at(name, value, depth - 1),
+            None => Err(RuntimeError::UndefinedVariable {
+                var_name: name.to_string(),
+            }),
+        }
+    }
 }

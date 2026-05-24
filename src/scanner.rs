@@ -311,7 +311,7 @@ mod test {
         assert!(scanner.parse().is_ok());
         let lex1 = "var".to_string();
         let lex2 = "x".to_string();
-        let expected = vec![
+        let expected = [
             tok!(TokenType::Var, lex1, (0, 0)),
             tok!(TokenType::Identifier(lex2.to_string()), lex2, (0, 4)),
             tok!(TokenType::Eq, String::from("="), (0, 6)),
@@ -319,8 +319,8 @@ mod test {
             tok!(TokenType::Eof, String::from(""), (0, 9)),
         ];
         assert_eq!(scanner.tokens.len(), expected.len(), "num tokens mismatch");
-        for i in 0..expected.len() {
-            let e_tok = &expected[i];
+        for (i, exp) in expected.iter().enumerate() {
+            let e_tok = &exp;
             let r_tok = &scanner.tokens[i];
             assert_eq!(e_tok.ty, r_tok.ty, "type mismatch at index {i}");
             assert_eq!(e_tok.pos, r_tok.pos, "pos mismatch at index {i}");
@@ -334,17 +334,19 @@ mod test {
         assert!(scanner.parse().is_ok());
         let lex1 = "var".to_string();
         let lex2 = "pi".to_string();
-        let expected = vec![
+        #[allow(clippy::approx_constant)]
+        let pi = 3.14;
+        let expected = [
             tok!(TokenType::Var, lex1, (0, 0)),
             tok!(TokenType::Identifier(lex2.to_string()), lex2, (0, 4)),
             tok!(TokenType::Eq, String::from("="), (0, 7)),
-            tok!(TokenType::Number(3.14), String::from("3.14"), (0, 9)),
+            tok!(TokenType::Number(pi), String::from("3.14"), (0, 9)),
             tok!(TokenType::Semicolon, String::from(";"), (0, 13)),
             tok!(TokenType::Eof, String::from(""), (0, 14)),
         ];
         assert_eq!(scanner.tokens.len(), expected.len(), "num tokens mismatch");
-        for i in 0..expected.len() {
-            let e_tok = &expected[i];
+        for (i, exp) in expected.iter().enumerate() {
+            let e_tok = &exp;
             let r_tok = &scanner.tokens[i];
             assert_eq!(e_tok.ty, r_tok.ty, "type mismatch at index {i}");
             assert_eq!(e_tok.pos, r_tok.pos, "pos mismatch at index {i}");
@@ -357,7 +359,7 @@ mod test {
         assert!(scanner.parse().is_ok());
         let lex1 = "var".to_string();
         let lex2 = "x".to_string();
-        let expected = vec![
+        let expected = [
             tok!(TokenType::Var, lex1, (0, 0)),
             tok!(TokenType::Identifier(lex2.to_string()), lex2, (0, 4)),
             tok!(TokenType::Eq, String::from("="), (0, 6)),
@@ -370,8 +372,8 @@ mod test {
             tok!(TokenType::Eof, String::from(""), (0, 14)),
         ];
         assert_eq!(scanner.tokens.len(), expected.len(), "num tokens mismatch");
-        for i in 0..expected.len() {
-            let e_tok = &expected[i];
+        for (i, exp) in expected.iter().enumerate() {
+            let e_tok = &exp;
             let r_tok = &scanner.tokens[i];
             assert_eq!(e_tok.ty, r_tok.ty, "type mismatch at index {i}");
             assert_eq!(e_tok.pos, r_tok.pos, "pos mismatch at index {i}");
@@ -384,7 +386,7 @@ mod test {
         let mut scanner = Scanner::new(case);
         assert!(scanner.parse().is_ok());
         let lex1 = "print".to_string();
-        let expected = vec![
+        let expected = [
             tok!(TokenType::Print, lex1, (0, 0)),
             tok!(
                 TokenType::StringLit("hello world".to_string()),
@@ -395,8 +397,8 @@ mod test {
             tok!(TokenType::Eof, String::from(""), (0, 20)),
         ];
         assert_eq!(scanner.tokens.len(), expected.len(), "num tokens mismatch");
-        for i in 0..expected.len() {
-            let e_tok = &expected[i];
+        for (i, exp) in expected.iter().enumerate() {
+            let e_tok = &exp;
             let r_tok = &scanner.tokens[i];
             assert_eq!(e_tok.ty, r_tok.ty, "type mismatch at index {i}");
             assert_eq!(e_tok.pos, r_tok.pos, "pos mismatch at index {i}");
@@ -408,7 +410,7 @@ mod test {
         let case = b"if (x == 10) {print x; }";
         let mut scanner = Scanner::new(case);
         assert!(scanner.parse().is_ok());
-        let expected = vec![
+        let expected = [
             tok!(TokenType::If, "if".to_string(), (0, 0)),
             tok!(TokenType::LeftParen, "(".to_string(), (0, 3)),
             tok!(
@@ -431,8 +433,8 @@ mod test {
             tok!(TokenType::Eof, String::from(""), (0, 24)),
         ];
         assert_eq!(scanner.tokens.len(), expected.len(), "num tokens mismatch");
-        for i in 0..expected.len() {
-            let e_tok = &expected[i];
+        for (i, exp) in expected.iter().enumerate() {
+            let e_tok = &exp;
             let r_tok = &scanner.tokens[i];
             assert_eq!(e_tok.ty, r_tok.ty, "type mismatch at index {i}");
             assert_eq!(e_tok.pos, r_tok.pos, "pos mismatch at index {i}");
@@ -444,7 +446,7 @@ mod test {
         let case = b"while (x > 0) { x = x - 1; }";
         let mut scanner = Scanner::new(case);
         assert!(scanner.parse().is_ok());
-        let expected = vec![
+        let expected = [
             tok!(TokenType::While, "while".to_string(), (0, 0)),
             tok!(TokenType::LeftParen, "(".to_string(), (0, 6)),
             tok!(
@@ -474,8 +476,8 @@ mod test {
             tok!(TokenType::Eof, String::from(""), (0, 28)),
         ];
         assert_eq!(scanner.tokens.len(), expected.len(), "num tokens mismatch");
-        for i in 0..expected.len() {
-            let e_tok = &expected[i];
+        for (i, exp) in expected.iter().enumerate() {
+            let e_tok = &exp;
             let r_tok = &scanner.tokens[i];
             assert_eq!(e_tok.ty, r_tok.ty, "type mismatch at index {i}");
             assert_eq!(e_tok.pos, r_tok.pos, "pos mismatch at index {i}");
@@ -488,7 +490,7 @@ mod test {
 
         let mut scanner = Scanner::new(case);
         assert!(scanner.parse().is_ok());
-        let expected = vec![
+        let expected = [
             tok!(TokenType::Var, "var".to_string(), (1, 0)),
             tok!(
                 TokenType::Identifier("y".to_string()),
@@ -501,8 +503,8 @@ mod test {
             tok!(TokenType::Eof, String::from(""), (1, 10)),
         ];
         assert_eq!(scanner.tokens.len(), expected.len(), "num tokens mismatch");
-        for i in 0..expected.len() {
-            let e_tok = &expected[i];
+        for (i, exp) in expected.iter().enumerate() {
+            let e_tok = &exp;
             let r_tok = &scanner.tokens[i];
             assert_eq!(e_tok.ty, r_tok.ty, "type mismatch at index {i}");
             assert_eq!(e_tok.pos, r_tok.pos, "pos mismatch at index {i}");
@@ -514,7 +516,7 @@ mod test {
 
         let mut scanner = Scanner::new(case);
         assert!(scanner.parse().is_ok());
-        let expected = vec![
+        let expected = [
             tok!(TokenType::BangEq, "!=".to_string(), (0, 0)),
             tok!(TokenType::EqEq, "==".to_string(), (0, 3)),
             tok!(TokenType::LessEq, String::from("<="), (0, 6)),
@@ -524,8 +526,8 @@ mod test {
             tok!(TokenType::Eof, String::from(""), (0, 15)),
         ];
         assert_eq!(scanner.tokens.len(), expected.len(), "num tokens mismatch");
-        for i in 0..expected.len() {
-            let e_tok = &expected[i];
+        for (i, exp) in expected.iter().enumerate() {
+            let e_tok = &exp;
             let r_tok = &scanner.tokens[i];
             assert_eq!(e_tok.ty, r_tok.ty, "type mismatch at index {i}");
             assert_eq!(e_tok.pos, r_tok.pos, "pos mismatch at index {i}");
@@ -539,7 +541,7 @@ mod test {
         assert!(scanner.parse().is_ok());
         let lex1 = "var".to_string();
         let lex2 = "x".to_string();
-        let expected = vec![
+        let expected = [
             tok!(TokenType::Var, lex1, (0, 0)),
             tok!(TokenType::Identifier(lex2.to_string()), lex2, (0, 4)),
             tok!(TokenType::Eq, String::from("="), (0, 6)),
@@ -552,8 +554,8 @@ mod test {
             tok!(TokenType::Eof, String::from(""), (0, 11)),
         ];
         assert_eq!(scanner.tokens.len(), expected.len(), "num tokens mismatch");
-        for i in 0..expected.len() {
-            let e_tok = &expected[i];
+        for (i, exp) in expected.iter().enumerate() {
+            let e_tok = &exp;
             let r_tok = &scanner.tokens[i];
             assert_eq!(e_tok.ty, r_tok.ty, "type mismatch at index {i}");
             assert_eq!(e_tok.pos, r_tok.pos, "pos mismatch at index {i}");

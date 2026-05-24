@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     environment::Environment,
@@ -19,6 +19,7 @@ fn is_truthy(lit: &Lit) -> bool {
 pub struct Interpreter<W: std::io::Write> {
     output: W,
     environments: Rc<Environment>,
+    locals: HashMap<*const Expr, usize>,
 }
 
 impl<W: std::io::Write> Interpreter<W> {
@@ -26,11 +27,16 @@ impl<W: std::io::Write> Interpreter<W> {
         let interpreter = Self {
             output,
             environments: Rc::new(Environment::new()),
+            locals: HashMap::new(),
         };
         for (name, func) in native_functions() {
             interpreter.environments.define(&name, func);
         }
         interpreter
+    }
+
+    pub fn resolve(&mut self, locals: HashMap<*const Expr, usize>) {
+        self.locals = locals;
     }
 
     pub fn interpret(&mut self, stmts: &[Stmt]) -> Result<(), RuntimeError> {
@@ -99,10 +105,10 @@ impl<W: std::io::Write> Interpreter<W> {
                     }),
                 }
             }
-            Expr::Variable(name) => self.get_var(name),
+            Expr::Variable(name) => self.get_var(expr, name),
             Expr::Assign { name, value } => {
                 let value = self.eval(value)?;
-                self.set(name, value)
+                self.set(expr, name, value)
             }
             Expr::Call {
                 callee,
@@ -141,13 +147,19 @@ impl<W: std::io::Write> Interpreter<W> {
         self.environments = parent;
     }
 
-    fn get_var(&self, name: &str) -> Result<Lit, RuntimeError> {
-        self.environments.get(name)
+    fn get_var(&self, expr: &Expr, name: &str) -> Result<Lit, RuntimeError> {
+        match self.locals.get(&(expr as *const Expr)) {
+            Some(depth) => self.environments.get_at(name, *depth),
+            None => self.environments.get(name), // global
+        }
     }
 
     /// is used for x = 5, after var has been already defined
-    fn set(&mut self, name: &str, value: Lit) -> Result<Lit, RuntimeError> {
-        self.environments.set(name, value)
+    fn set(&mut self, expr: &Expr, name: &str, value: Lit) -> Result<Lit, RuntimeError> {
+        match self.locals.get(&(expr as *const Expr)) {
+            Some(depth) => self.environments.set_at(name, value, *depth),
+            None => self.environments.set(name, value),
+        }
     }
 
     /// is used at var x = 5
@@ -250,29 +262,30 @@ impl<W: std::io::Write> Interpreter<W> {
 #[cfg(test)]
 mod test {
     use crate::{
-        errors::RuntimeError,
+        errors::{ResolveError, RuntimeError},
         interpreter::Interpreter,
         nodes::{Lit, Stmt},
         parser::Parser,
+        resolver::Resolver,
         scanner::Scanner,
     };
 
     fn do_eval(case: &str) -> Result<Lit, RuntimeError> {
         let mut scanner = Scanner::new(case.as_bytes());
-        let _ = scanner.parse().unwrap();
+        scanner.parse().unwrap();
         let mut parser = Parser::new(&scanner.tokens);
         let res = parser.parse().unwrap();
         if let Stmt::Expression(expr) = &res[0] {
             let output = Vec::new();
             let mut interpreter = Interpreter::new(output);
-            return interpreter.eval(&expr);
+            return interpreter.eval(expr);
         }
         unreachable!()
     }
 
     #[test]
     fn eval_arithmetic_expressions() {
-        let cases = vec![
+        let cases = [
             ("1 + 2;", Ok(Lit::Number(3.0))),
             ("10 - 3;", Ok(Lit::Number(7.0))),
             ("3 * 4;", Ok(Lit::Number(12.0))),
@@ -293,7 +306,7 @@ mod test {
 
     #[test]
     fn eval_unary_expressions() {
-        let cases = vec![
+        let cases = [
             ("-5;", Lit::Number(-5.0)),
             ("--5;", Lit::Number(5.0)),
             ("!true;", Lit::Bool(false)),
@@ -309,7 +322,7 @@ mod test {
 
     #[test]
     fn eval_comparison_expressions() {
-        let cases = vec![
+        let cases = [
             ("5 > 3;", Lit::Bool(true)),
             ("3 > 5;", Lit::Bool(false)),
             ("5 >= 5;", Lit::Bool(true)),
@@ -325,7 +338,7 @@ mod test {
 
     #[test]
     fn eval_equality_expressions() {
-        let cases = vec![
+        let cases = [
             ("1 == 1;", Lit::Bool(true)),
             ("1 == 2;", Lit::Bool(false)),
             ("1 != 2;", Lit::Bool(true)),
@@ -342,7 +355,7 @@ mod test {
 
     #[test]
     fn eval_string_expressions() {
-        let cases = vec![
+        let cases = [
             (
                 "\"hello\" + \" world\";",
                 Lit::String("hello world".to_string()),
@@ -359,7 +372,7 @@ mod test {
 
     #[test]
     fn eval_type_errors_expressions() {
-        let cases = vec!["\"hello\" - 1;", "true + 1;", "-true;", "\"a\" > \"b\";"];
+        let cases = ["\"hello\" - 1;", "true + 1;", "-true;", "\"a\" > \"b\";"];
 
         for case in cases {
             let result = do_eval(case);
@@ -369,14 +382,14 @@ mod test {
 
     #[test]
     fn simple_stmts() {
-        let cases = vec![
+        let cases = [
             ("print 5 + 3 * 2;", "11\n"),
             ("print \"hello world\";", "hello world\n"),
             ("1 + 2;", ""),
         ];
         for (case, exp) in cases {
             let mut scanner = Scanner::new(case.as_bytes());
-            let _ = scanner.parse().unwrap();
+            scanner.parse().unwrap();
             let mut parser = Parser::new(&scanner.tokens);
             let stmts = parser.parse().unwrap();
             let mut out = Vec::new();
@@ -388,14 +401,14 @@ mod test {
 
     #[test]
     fn variables() {
-        let cases = vec![
+        let cases = [
             ("var x = 5; print x;", "5\n"),
             ("var x; print x;", "nil\n"),
             ("var x = 5 + 3; print x;", "8\n"),
         ];
         for (case, exp) in cases {
             let mut scanner = Scanner::new(case.as_bytes());
-            let _ = scanner.parse().unwrap();
+            scanner.parse().unwrap();
             let mut parser = Parser::new(&scanner.tokens);
             let stmts = parser.parse().unwrap();
             let mut out = Vec::new();
@@ -405,7 +418,7 @@ mod test {
         }
 
         let mut scanner = Scanner::new("print x;".as_bytes());
-        let _ = scanner.parse().unwrap();
+        scanner.parse().unwrap();
         let mut parser = Parser::new(&scanner.tokens);
         let stmts = parser.parse().unwrap();
         let mut out = Vec::new();
@@ -414,13 +427,13 @@ mod test {
         if let Err(RuntimeError::UndefinedVariable { var_name }) = interpreter.interpret(&stmts) {
             assert!(var_name.as_str() == "x");
         } else {
-            assert!(false, "unreachable at variables")
+            unreachable!("unreachable at variables")
         }
     }
 
     #[test]
     fn assignments() {
-        let cases = vec![
+        let cases = [
             ("var x = 5; x = 10; print x;", "10\n"), // basic assignement
             ("var x = 5; print x = 10;", "10\n"),    // assignment is an expression!
             (
@@ -434,7 +447,7 @@ mod test {
         ];
         for (case, exp) in cases {
             let mut scanner = Scanner::new(case.as_bytes());
-            let _ = scanner.parse().unwrap();
+            scanner.parse().unwrap();
             let mut parser = Parser::new(&scanner.tokens);
             let stmts = parser.parse().unwrap();
             let mut out = Vec::new();
@@ -445,7 +458,7 @@ mod test {
         let error_case = "x = 5;";
 
         let mut scanner = Scanner::new(error_case.as_bytes());
-        let _ = scanner.parse().unwrap();
+        scanner.parse().unwrap();
         let mut parser = Parser::new(&scanner.tokens);
         let stmts = parser.parse().unwrap();
         let mut out = Vec::new();
@@ -454,13 +467,13 @@ mod test {
         if let Err(RuntimeError::UndefinedVariable { var_name }) = interpreter.interpret(&stmts) {
             assert!(var_name.as_str() == "x");
         } else {
-            assert!(false, "unreachable at variables")
+            unreachable!("unreachable at variables")
         }
     }
 
     #[test]
     fn scope() {
-        let cases = vec![
+        let cases = [
             // inner scope shadows outer
             ("var x = 1; { var x = 2; print x; } print x;", "2\n1\n"),
             // inner scope sees outer variable
@@ -487,7 +500,7 @@ mod test {
         ];
         for (case, exp) in cases {
             let mut scanner = Scanner::new(case.as_bytes());
-            let _ = scanner.parse().unwrap();
+            scanner.parse().unwrap();
             let mut parser = Parser::new(&scanner.tokens);
             let stmts = parser.parse().unwrap();
             let mut out = Vec::new();
@@ -499,7 +512,7 @@ mod test {
         let error_case = "{ var x = 1; } print x;";
 
         let mut scanner = Scanner::new(error_case.as_bytes());
-        let _ = scanner.parse().unwrap();
+        scanner.parse().unwrap();
         let mut parser = Parser::new(&scanner.tokens);
         let stmts = parser.parse().unwrap();
         let mut out = Vec::new();
@@ -508,13 +521,13 @@ mod test {
         if let Err(RuntimeError::UndefinedVariable { var_name }) = interpreter.interpret(&stmts) {
             assert!(var_name.as_str() == "x");
         } else {
-            assert!(false, "unreachable at variables")
+            unreachable!("unreachable at variables")
         }
     }
 
     #[test]
     fn if_statements() {
-        let cases = vec![
+        let cases = [
             ("if (true) print 1;", "1\n"),
             ("if (false) print 1;", ""),
             ("if (true) print 1; else print 2;", "1\n"),
@@ -527,7 +540,7 @@ mod test {
         ];
         for (case, exp) in cases {
             let mut scanner = Scanner::new(case.as_bytes());
-            let _ = scanner.parse().unwrap();
+            scanner.parse().unwrap();
             let mut parser = Parser::new(&scanner.tokens);
             let stmts = parser.parse().unwrap();
             let mut out = Vec::new();
@@ -539,7 +552,7 @@ mod test {
 
     #[test]
     fn logical_and_or() {
-        let cases = vec![
+        let cases = [
             // and
             ("print true and true;", "true\n"),
             ("print true and false;", "false\n"),
@@ -568,7 +581,7 @@ mod test {
         ];
         for (case, exp) in cases {
             let mut scanner = Scanner::new(case.as_bytes());
-            let _ = scanner.parse().unwrap();
+            scanner.parse().unwrap();
             let mut parser = Parser::new(&scanner.tokens);
             let stmts = parser.parse().unwrap();
             let mut out = Vec::new();
@@ -580,7 +593,7 @@ mod test {
 
     #[test]
     fn while_loops() {
-        let cases = vec![
+        let cases = [
             // basic
             ("var x = 0; while (x < 3) { x = x + 1; } print x;", "3\n"),
             // never executes
@@ -598,7 +611,7 @@ mod test {
         ];
         for (case, exp) in cases {
             let mut scanner = Scanner::new(case.as_bytes());
-            let _ = scanner.parse().unwrap();
+            scanner.parse().unwrap();
             let mut parser = Parser::new(&scanner.tokens);
             let stmts = parser.parse().unwrap();
             let mut out = Vec::new();
@@ -610,7 +623,7 @@ mod test {
 
     #[test]
     fn for_loops() {
-        let cases = vec![
+        let cases = [
             // basic counting
             ("for (var i = 0; i < 3; i = i + 1) print i;", "0\n1\n2\n"),
             // accumulator
@@ -628,7 +641,7 @@ mod test {
         ];
         for (case, exp) in cases {
             let mut scanner = Scanner::new(case.as_bytes());
-            let _ = scanner.parse().unwrap();
+            scanner.parse().unwrap();
             let mut parser = Parser::new(&scanner.tokens);
             let stmts = parser.parse().unwrap();
             let mut out = Vec::new();
@@ -653,7 +666,7 @@ mod test {
            "#;
         let expect = "0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n55\n89\n144\n233\n377\n610\n987\n1597\n2584\n4181\n6765\n";
         let mut scanner = Scanner::new(code.as_bytes());
-        let _ = scanner.parse().unwrap();
+        scanner.parse().unwrap();
         let mut parser = Parser::new(&scanner.tokens);
         let stmts = parser.parse().unwrap();
         let mut out = Vec::new();
@@ -664,7 +677,7 @@ mod test {
 
     #[test]
     fn funcs() {
-        let cases = vec![
+        let cases = [
             ("fun greet() { print \"hello\"; } greet();", "hello\n"),
             ("fun add(a, b) { return a + b; } print add(1, 2);", "3\n"),
             ("fun square(x) { return x * x; } print square(4);", "16\n"),
@@ -694,7 +707,7 @@ mod test {
         ];
         for (case, exp) in cases {
             let mut scanner = Scanner::new(case.as_bytes());
-            let _ = scanner.parse().unwrap();
+            scanner.parse().unwrap();
             let mut parser = Parser::new(&scanner.tokens);
             let stmts = parser.parse().unwrap();
             let mut out = Vec::new();
@@ -704,7 +717,7 @@ mod test {
         }
 
         //errors
-        let cases = vec![
+        let cases = [
             (
                 "fun f(a) {} f();",
                 Err(RuntimeError::ArityMismatch {
@@ -722,7 +735,7 @@ mod test {
         ];
         for (case, err) in cases {
             let mut scanner = Scanner::new(case.as_bytes());
-            let _ = scanner.parse().unwrap();
+            scanner.parse().unwrap();
             let mut parser = Parser::new(&scanner.tokens);
             let stmts = parser.parse().unwrap();
             let mut out = Vec::new();
@@ -733,7 +746,7 @@ mod test {
 
     #[test]
     fn closures() {
-        let cases = vec![
+        let cases = [
             // basic closure
             (
                 "fun makeCounter() { var count = 0; fun increment() { count = count + 1; return count; } return increment; } var counter = makeCounter(); print counter(); print counter();",
@@ -749,13 +762,86 @@ mod test {
         ];
         for (case, exp) in cases {
             let mut scanner = Scanner::new(case.as_bytes());
-            let _ = scanner.parse().unwrap();
+            scanner.parse().unwrap();
             let mut parser = Parser::new(&scanner.tokens);
             let stmts = parser.parse().unwrap();
             let mut out = Vec::new();
             let mut interpreter = Interpreter::new(&mut out);
             assert!(interpreter.interpret(&stmts).is_ok());
             assert_eq!(str::from_utf8(&out).unwrap(), exp, "case: {case}");
+        }
+    }
+
+    #[test]
+    fn resolving() {
+        let cases = [
+            ("var a = 1; print a;", "1\n"),
+            // classic closure test
+            ("var a = 1; { var a = 2; print a; } print a;", "2\n1\n"),
+            // counter still works
+            (
+                "fun makeCounter() { var count = 0; fun increment() { count = count + 1; return count; } return increment; } var c = makeCounter(); print c(); print c();",
+                "1\n2\n",
+            ),
+            // each counter independent
+            (
+                "fun makeCounter() { var count = 0; fun increment() { count = count + 1; return count; } return increment; } var c1 = makeCounter(); var c2 = makeCounter(); print c1(); print c1(); print c2();",
+                "1\n2\n1\n",
+            ),
+            // valid return inside function
+            ("fun f() { return 1; } print f();", "1\n"),
+            (
+                "var x = 1; fun f() { var x = 2; fun g() { return x; } return g(); } print f();",
+                "2\n",
+            ), // g sees f's x, not global x
+            (
+                "var x = 1; fun f() { fun g() { return x; } return g(); } print f();",
+                "1\n",
+            ), // g sees global x through f
+        ];
+
+        for (case, exp) in cases {
+            let mut scanner = Scanner::new(case.as_bytes());
+            scanner.parse().unwrap();
+
+            let mut parser = Parser::new(&scanner.tokens);
+            let stmts = parser.parse().unwrap();
+
+            let mut resolver = Resolver::new();
+            for stmt in &stmts {
+                resolver.resolve_stmt(stmt).unwrap();
+            }
+
+            let mut out = Vec::new();
+            let mut interpreter = Interpreter::new(&mut out);
+            interpreter.resolve(resolver.locals);
+            assert!(interpreter.interpret(&stmts).is_ok());
+            assert_eq!(str::from_utf8(&out).unwrap(), exp, "case: {case}");
+        }
+
+        let error_cases = [
+            (
+                "var a = a;",
+                ResolveError::VariableInOwnInititalizer {
+                    name: String::from("a"),
+                },
+            ),
+            ("return 5;", ResolveError::ReturnOutsideFunction),
+            // return outside function
+            ("fun f() { } return 1;", ResolveError::ReturnOutsideFunction),
+        ];
+
+        for (case, exp) in error_cases {
+            let mut scanner = Scanner::new(case.as_bytes());
+            scanner.parse().unwrap();
+
+            let mut parser = Parser::new(&scanner.tokens);
+            let stmts = parser.parse().unwrap();
+
+            let mut resolver = Resolver::new();
+            if let Err(err) = resolver.resolve_stmt(&stmts[0]) {
+                assert_eq!(err, exp, "error case: {case}");
+            }
         }
     }
 }

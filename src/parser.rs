@@ -595,7 +595,7 @@ mod test {
 
         for (case, exp) in cases {
             let mut scanner = Scanner::new(case.as_bytes());
-            let _ = scanner.parse().unwrap();
+            scanner.parse().unwrap();
             let mut parser = Parser::new(&scanner.tokens);
             let res = parser.parse().unwrap();
             if let Stmt::Expression(expr) = &res[0] {
