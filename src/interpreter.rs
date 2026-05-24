@@ -26,7 +26,7 @@ impl<W: std::io::Write> Interpreter<W> {
     pub fn new(output: W) -> Self {
         let interpreter = Self {
             output,
-            environments: Rc::new(Environment::new()),
+            environments: Rc::new(Environment::default()),
             locals: HashMap::new(),
         };
         for (name, func) in native_functions() {
@@ -96,10 +96,10 @@ impl<W: std::io::Write> Interpreter<W> {
                     Op::LessThanEqual => left.less_eq(right),
                     Op::GreaterThan => left.greater(right),
                     Op::GreaterThanEqual => left.greater_eq(right),
-                    Op::Add => left.add(right),
-                    Op::Sub => left.sub(right),
-                    Op::Mul => left.mul(right),
-                    Op::Div => left.div(right),
+                    Op::Add => left.lox_add(right),
+                    Op::Sub => left.lox_sub(right),
+                    Op::Mul => left.lox_mul(right),
+                    Op::Div => left.lox_div(right),
                     _ => Err(RuntimeError::InvalidOperator {
                         msg: format!("'{}' is not a valid binary operator", op),
                     }),
@@ -807,7 +807,7 @@ mod test {
             let mut parser = Parser::new(&scanner.tokens);
             let stmts = parser.parse().unwrap();
 
-            let mut resolver = Resolver::new();
+            let mut resolver = Resolver::default();
             for stmt in &stmts {
                 resolver.resolve_stmt(stmt).unwrap();
             }
@@ -838,7 +838,7 @@ mod test {
             let mut parser = Parser::new(&scanner.tokens);
             let stmts = parser.parse().unwrap();
 
-            let mut resolver = Resolver::new();
+            let mut resolver = Resolver::default();
             if let Err(err) = resolver.resolve_stmt(&stmts[0]) {
                 assert_eq!(err, exp, "error case: {case}");
             }

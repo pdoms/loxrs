@@ -2,20 +2,13 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{errors::RuntimeError, nodes::Lit};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Environment {
     pub values: Rc<RefCell<HashMap<String, Lit>>>,
     pub parent: Option<Rc<Environment>>,
 }
 
 impl Environment {
-    pub fn new() -> Self {
-        Self {
-            values: Rc::new(RefCell::new(HashMap::new())),
-            parent: None,
-        }
-    }
-
     pub fn new_enclosed(parent: Rc<Environment>) -> Self {
         Self {
             values: Rc::new(RefCell::new(HashMap::new())),

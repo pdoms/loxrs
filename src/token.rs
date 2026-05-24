@@ -25,6 +25,7 @@ impl Token {
     /// shorthand constructuctor for tokens that can be represented by one char
     /// Returns the constructed token on success. (Calculates postion like
     /// new_do_offset.
+    #[allow(clippy::result_unit_err)]
     pub fn new_from_char(ch: char, pos: (usize, usize)) -> Result<Self, ()> {
         let ty = match ch {
             ';' => TokenType::Semicolon,

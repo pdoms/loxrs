@@ -4,7 +4,8 @@ use std::{io::Write, path::Path};
 use crate::resolver::Resolver;
 use crate::{interpreter::Interpreter, parser::Parser, scanner::Scanner};
 
-pub fn run(input_file: &str) -> Result<(), ()> {
+#[allow(clippy::result_unit_err)]
+pub fn run(input_file: &str, verbose: bool) -> Result<(), ()> {
     let path = Path::new(input_file);
     let data = match std::fs::read(path) {
         Ok(data) => data,
@@ -17,40 +18,46 @@ pub fn run(input_file: &str) -> Result<(), ()> {
     match scanner.parse() {
         Ok(_) => {}
         Err(errors) => {
-            println!("[ERROR] scanner encountered the following errors");
+            eprintln!("[ERROR] scanner encountered the following errors");
             for error in errors {
-                print!("{}{}", input_file, error);
+                eprint!("{}{}", input_file, error);
             }
+            return Err(());
         }
     }
-    println!("Parsed {} tokens.", scanner.tokens.len());
+    if verbose {
+        println!("[INFO] Parsed {} tokens.", scanner.tokens.len());
+    }
 
-    //TODO do we really need it as ref? Could also just be passed on
     let mut parser = Parser::new(&scanner.tokens);
     let stmts = match parser.parse() {
         Ok(res) => res,
         Err(errors) => {
-            println!("[ERROR] parser encountered the following errors");
+            eprintln!("[ERROR] parser encountered the following errors");
             for error in errors {
-                print!("{}{}", input_file, error);
+                eprint!("{}{}", input_file, error);
             }
-            vec![]
+            return Err(());
         }
     };
 
-    let mut resolver = Resolver::new();
+    let mut resolver = Resolver::default();
     for stmt in &stmts {
         if let Err(err) = resolver.resolve_stmt(stmt) {
-            println!("[ERROR] {err}",);
+            eprintln!("[ERROR] {err}",);
             return Err(());
         }
     }
 
     let mut stdout = stdout();
-    println!("Parsed {} statements", stmts.len());
+    if verbose {
+        println!("[INFO] Parsed {} statements", stmts.len());
+    }
     let mut interpreter = Interpreter::new(&mut stdout);
     interpreter.resolve(resolver.locals);
-    println!("================ Program StdOut ================");
+    if verbose {
+        println!("================ Program StdOut ================");
+    }
     match interpreter.interpret(&stmts) {
         Ok(_) => match stdout.flush() {
             Ok(_) => Ok(()),

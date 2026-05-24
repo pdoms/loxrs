@@ -86,6 +86,7 @@ pub enum RuntimeError {
     Unwind(Unwind),
     ArityMismatch { expected: usize, got: usize },
     NotCallable((usize, usize)),
+    Io { msg: String },
 }
 impl Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -107,6 +108,7 @@ impl Display for RuntimeError {
                 "NotCallable: entity is not callable at ({}):({})",
                 pos.0, pos.1
             ),
+            RuntimeError::Io { msg } => write!(f, "IO: {msg}"),
         }
     }
 }

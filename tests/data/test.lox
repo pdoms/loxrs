@@ -1,0 +1,87 @@
+// arithmetic
+print 1 + 2;
+print 10 / 2 - 1;
+print 2 * (3 + 4);
+
+// strings
+print "hello" + " " + "world";
+
+// variables and scope
+var x = 10;
+{
+    var x = 20;
+    print x;
+}
+print x;
+
+// if/else
+if (x > 5) {
+    print "big";
+} else {
+    print "small";
+}
+
+// while
+var i = 0;
+while (i < 3) {
+    print i;
+    i = i + 1;
+}
+
+// for
+for (var j = 0; j < 3; j = j + 1) {
+    print j;
+}
+
+// functions
+fun add(a, b) { return a + b; }
+print add(3, 4);
+
+// recursion
+fun fib(n) {
+    if (n <= 1) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+print fib(7);
+
+// closures
+fun makeCounter() {
+    var count = 0;
+    fun increment() {
+        count = count + 1;
+        return count;
+    }
+    return increment;
+}
+var counter = makeCounter();
+print counter();
+print counter();
+print counter();
+
+// native
+print type_of(1);
+print type_of("hello");
+print type_of(true);
+print type_of(nil);
+print clock() > 0;
+
+// math
+print sqrt(9);
+print floor(3.7);
+print ceil(3.2);
+print abs(-5);
+print pow(2, 8);
+
+// string
+print len("hello");
+print to_string(42);
+print to_number("3.14");
+print to_number("abc");
+
+// file I/O
+write_file("tmp.txt", "hello from lox");
+print read_file("tmp.txt");
+append_file("tmp.txt", " and line 2");
+print read_file("tmp.txt");
+
+

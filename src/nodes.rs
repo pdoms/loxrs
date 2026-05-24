@@ -92,11 +92,12 @@ impl Display for Expr {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum Lit {
     Number(f64),
     String(String),
     Bool(bool),
+    #[default]
     Nil,
     Function(LoxFunction),
     NativeFunction(NativeFunction),
@@ -128,7 +129,7 @@ impl Display for Lit {
 
 impl Lit {
     #[inline]
-    pub fn add(self, other: Lit) -> Result<Lit, RuntimeError> {
+    pub fn lox_add(self, other: Lit) -> Result<Lit, RuntimeError> {
         match (self, other) {
             (Lit::Number(lhs), Lit::Number(rhs)) => Ok(Lit::Number(lhs + rhs)),
             (Lit::String(lhs), Lit::String(rhs)) => Ok(Lit::String(lhs + &rhs)),
@@ -139,7 +140,7 @@ impl Lit {
     }
 
     #[inline]
-    pub fn sub(self, other: Lit) -> Result<Lit, RuntimeError> {
+    pub fn lox_sub(self, other: Lit) -> Result<Lit, RuntimeError> {
         match (self, other) {
             (Lit::Number(lhs), Lit::Number(rhs)) => Ok(Lit::Number(lhs - rhs)),
             _ => Err(RuntimeError::TypeError {
@@ -149,7 +150,7 @@ impl Lit {
     }
 
     #[inline]
-    pub fn mul(self, other: Lit) -> Result<Lit, RuntimeError> {
+    pub fn lox_mul(self, other: Lit) -> Result<Lit, RuntimeError> {
         match (self, other) {
             (Lit::Number(lhs), Lit::Number(rhs)) => Ok(Lit::Number(lhs * rhs)),
             _ => Err(RuntimeError::TypeError {
@@ -159,7 +160,7 @@ impl Lit {
     }
 
     #[inline]
-    pub fn div(self, other: Lit) -> Result<Lit, RuntimeError> {
+    pub fn lox_div(self, other: Lit) -> Result<Lit, RuntimeError> {
         match (self, other) {
             (Lit::Number(lhs), Lit::Number(rhs)) => {
                 if rhs == 0.0 {

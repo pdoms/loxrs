@@ -21,15 +21,17 @@ enum FunctionType {
     Function,
 }
 
-impl Resolver {
-    pub fn new() -> Self {
+impl Default for Resolver {
+    fn default() -> Self {
         Self {
-            scopes: Vec::new(),
+            scopes: Default::default(),
             function_type: FunctionType::None,
-            locals: HashMap::new(),
+            locals: Default::default(),
         }
     }
+}
 
+impl Resolver {
     fn scope_in(&mut self) {
         self.scopes.push(HashMap::new());
     }
